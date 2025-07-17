@@ -167,8 +167,9 @@ def main():
     out['grid_position'] = grid and [g['position'] for g in grid] or None
     out['driver'] = grid and [driver_map.get(g['driver_number'], {}).get('full_name', g['driver_number']) for g in grid] or None
     out['team'] = grid and [driver_map.get(g['driver_number'], {}).get('team_name', None) for g in grid] or None
-    out = out[['driver', 'team', 'grid_position', 'predicted_finish']]
-    out = out.sort_values('predicted_finish')
+    out = out[['predicted_finish', 'driver', 'team', 'grid_position']]
+    out = out.sort_values('predicted_finish').reset_index(drop=True)
+    out['predicted_finish'] = out.index + 1  # Ensure 1-N order in output
     print("Predicted finishing order for the upcoming race:")
     print(out.to_string(index=False))
 
