@@ -7,13 +7,7 @@ from src.model import build_model
 # Load data
 df = pd.read_csv('data/f1_race_data_2023_enriched.csv')
 
-# Features to use
-feature_cols = [
-    'qualifying_position', 'constructor_enc', 'driver_enc', 'race_round',
-    'air_temp', 'humidity', 'rain', 'avg_finish_last3'
-]
-
-# Encode categorical features
+# Encode categorical features first
 le_driver = LabelEncoder()
 le_constructor = LabelEncoder()
 le_tire = LabelEncoder()
@@ -21,6 +15,12 @@ le_tire = LabelEncoder()
 df['driver_enc'] = le_driver.fit_transform(df['driver'])
 df['constructor_enc'] = le_constructor.fit_transform(df['constructor'])
 df['tire_enc'] = le_tire.fit_transform(df['tire_compound'].fillna('Unknown'))
+
+# Features to use (now all columns exist)
+feature_cols = [
+    'qualifying_position', 'constructor_enc', 'driver_enc', 'race_round',
+    'air_temp', 'humidity', 'rain', 'avg_finish_last3'
+]
 
 # Impute avg_finish_last3 for early races
 df['avg_finish_last3'] = df['avg_finish_last3'].fillna(10)
@@ -31,6 +31,17 @@ print("Any NaNs in tire_enc before drop:", df['tire_enc'].isnull().any())
 print("Any NaNs in finishing_position before drop:", df['finishing_position'].isnull().any())
 print("Rows with NaNs in features:")
 print(df[df[feature_cols].isnull().any(axis=1)])
+
+# Print NaN count for each feature
+for col in feature_cols:
+    print(f"NaNs in {col}: {df[col].isnull().sum()}")
+
+# Suggest imputation for columns with missing values
+# (Uncomment to impute)
+# df['qualifying_position'] = df['qualifying_position'].fillna(df['qualifying_position'].median())
+# df['air_temp'] = df['air_temp'].fillna(df['air_temp'].mean())
+# df['humidity'] = df['humidity'].fillna(df['humidity'].mean())
+# df['rain'] = df['rain'].fillna(0)
 
 # Drop rows with any NaNs in features, tire, or label
 df = df.dropna(subset=feature_cols + ['tire_enc', 'finishing_position'])

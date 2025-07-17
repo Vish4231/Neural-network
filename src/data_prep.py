@@ -26,29 +26,44 @@ def get_race_data(year=2023):
     races = pd.concat(flat_content, ignore_index=True)
     print("Columns in races DataFrame:", races.columns.tolist())
     races = races[races['position'].notna()]
-    # Fetch qualifying results using FastF1
+    # Fetch qualifying results using FastF1 session.results with debug
     quali_results = []
     for rnd in races['round'].unique():
         try:
             session = fastf1.get_session(year, int(rnd), 'Q')
             session.load()
-            for drv in session.drivers:
-                drv_laps = session.laps.pick_driver(drv)
-                if not drv_laps.empty:
-                    # Use the best qualifying lap position
-                    quali_pos = drv_laps['Position'].min()
-                    quali_results.append({'round': rnd, 'driver': drv, 'qualifying_position': quali_pos})
+            print(f"Round {rnd}: session.results is None? {session.results is None}")
+            if hasattr(session, 'results') and session.results is not None:
+                print(f"session.results shape: {session.results.shape}")
+                print(session.results.head())
+                for _, row in session.results.iterrows():
+                    quali_results.append({
+                        'round': rnd,
+                        'driver': str(row['DriverNumber']),
+                        'qualifying_position': row['Position']
+                    })
+            else:
+                print(f"No results for round {rnd}")
         except Exception as e:
+            print(f"Exception for round {rnd}: {e}")
             continue
     quali_df = pd.DataFrame(quali_results)
-    # Merge race and quali on round and driver
+    print("Quali DF shape:", quali_df.shape)
+    print("Quali DF head:\n", quali_df.head())
+    print("Races DF number sample:", races['number'].unique()[:5])
+    print("Quali DF driver sample:", quali_df['driver'].unique()[:5] if not quali_df.empty else 'EMPTY')
+    # Merge on car number as string
+    races['number'] = races['number'].astype(str)
+    quali_df['driver'] = quali_df['driver'].astype(str)
     df = pd.merge(
         races,
         quali_df,
-        left_on=['round', 'driverId'],
+        left_on=['round', 'number'],
         right_on=['round', 'driver'],
         how='left'
     )
+    print("Merged DF shape:", df.shape)
+    print("Merged DF head:\n", df.head())
     df['finishing_position'] = df['position'].astype(int)
     df['constructor'] = df['constructorId']
     df['driver'] = df['driverId']
