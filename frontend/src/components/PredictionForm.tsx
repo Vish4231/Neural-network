@@ -1,20 +1,39 @@
-import React from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { Box, Button, MenuItem, TextField, Slider, Grid, Typography } from '@mui/material';
+import React from "react";
+import { useForm, Controller } from "react-hook-form";
+import {
+  Box,
+  Button,
+  MenuItem,
+  TextField,
+  Slider,
+  Grid,
+  Typography,
+} from "@mui/material";
 
 const drivers = [
-  'Lando NORRIS', 'Oscar PIASTRI', 'Max VERSTAPPEN', 'Lewis HAMILTON', 'George RUSSELL',
+  "Lando NORRIS",
+  "Oscar PIASTRI",
+  "Max VERSTAPPEN",
+  "Lewis HAMILTON",
+  "George RUSSELL",
   // ...add more
 ];
 const teams = [
-  'McLaren', 'Red Bull Racing', 'Ferrari', 'Mercedes', 'Aston Martin',
+  "McLaren",
+  "Red Bull Racing",
+  "Ferrari",
+  "Mercedes",
+  "Aston Martin",
   // ...add more
 ];
 const circuits = [
-  'Silverstone', 'Monaco', 'Baku', 'Suzuka', 'Yas Marina Circuit',
+  "Silverstone",
+  "Monaco",
+  "Baku",
+  "Suzuka",
+  "Yas Marina Circuit",
   // ...add more
 ];
-const trackTypes = ['permanent', 'street'];
 
 export type PredictionFormData = {
   driver_name: string;
@@ -48,9 +67,9 @@ interface Props {
 const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
   const { control, handleSubmit } = useForm<PredictionFormData>({
     defaultValues: {
-      driver_name: '',
-      team_name: '',
-      circuit: '',
+      driver_name: "",
+      team_name: "",
+      circuit: "",
       grid_position: 1,
       qualifying_lap_time: 90,
       air_temperature: 20,
@@ -62,7 +81,7 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
       team_form_last3: 5,
       qualifying_gap_to_pole: 0.5,
       teammate_grid_delta: 0,
-      track_type: 'permanent',
+      track_type: "permanent",
       overtaking_difficulty: 3,
       driver_championship_position: 5,
       team_championship_position: 3,
@@ -86,7 +105,9 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
             render={({ field }) => (
               <TextField select label="Driver" fullWidth required {...field}>
                 {drivers.map((d) => (
-                  <MenuItem key={d} value={d}>{d}</MenuItem>
+                  <MenuItem key={d} value={d}>
+                    {d}
+                  </MenuItem>
                 ))}
               </TextField>
             )}
@@ -99,7 +120,9 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
             render={({ field }) => (
               <TextField select label="Team" fullWidth required {...field}>
                 {teams.map((t) => (
-                  <MenuItem key={t} value={t}>{t}</MenuItem>
+                  <MenuItem key={t} value={t}>
+                    {t}
+                  </MenuItem>
                 ))}
               </TextField>
             )}
@@ -112,7 +135,9 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
             render={({ field }) => (
               <TextField select label="Circuit" fullWidth required {...field}>
                 {circuits.map((c) => (
-                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                  <MenuItem key={c} value={c}>
+                    {c}
+                  </MenuItem>
                 ))}
               </TextField>
             )}
@@ -125,14 +150,27 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
             render={({ field }) => (
               <Box>
                 <Typography gutterBottom>Grid Position</Typography>
-                <Slider {...field} min={1} max={20} step={1} valueLabelDisplay="auto" />
+                <Slider
+                  {...field}
+                  min={1}
+                  max={20}
+                  step={1}
+                  valueLabelDisplay="auto"
+                />
               </Box>
             )}
           />
         </Grid>
         {/* Add more fields as needed, e.g. qualifying_lap_time, weather, form, etc. */}
         <Grid item xs={12}>
-          <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading} size="large">
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            fullWidth
+            disabled={loading}
+            size="large"
+          >
             Predict
           </Button>
         </Grid>
@@ -141,4 +179,4 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
   );
 };
 
-export default PredictionForm; 
+export default PredictionForm;
