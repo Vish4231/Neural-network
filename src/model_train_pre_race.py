@@ -67,6 +67,26 @@ X = df[features]
 y = df['is_top5']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
+# --- XGBoost ---
+import xgboost as xgb
+xgb_model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+xgb_model.fit(X_train, y_train)
+xgb_pred = xgb_model.predict(X_test)
+print("\nXGBoost Test accuracy:", accuracy_score(y_test, xgb_pred))
+print("XGBoost Confusion matrix:\n", confusion_matrix(y_test, xgb_pred))
+print("XGBoost Classification report:\n", classification_report(y_test, xgb_pred, target_names=['Not Top 5', 'Top 5']))
+xgb_model.save_model('model/xgb_top5.model')
+
+# --- LightGBM ---
+import lightgbm as lgb
+lgbm_model = lgb.LGBMClassifier()
+lgbm_model.fit(X_train, y_train)
+lgbm_pred = lgbm_model.predict(X_test)
+print("\nLightGBM Test accuracy:", accuracy_score(y_test, lgbm_pred))
+print("LightGBM Confusion matrix:\n", confusion_matrix(y_test, lgbm_pred))
+print("LightGBM Classification report:\n", classification_report(y_test, lgbm_pred, target_names=['Not Top 5', 'Top 5']))
+lgbm_model.booster_.save_model('model/lgbm_top5.txt')
+
 # Build model
 model = keras.Sequential([
     layers.Input(shape=(X.shape[1],)),
