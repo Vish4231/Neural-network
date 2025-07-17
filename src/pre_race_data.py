@@ -121,6 +121,40 @@ def main():
         df.groupby('team_name')['finishing_position_int']
         .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
     )
+    # --- Add advanced features ---
+    # Qualifying gap to pole
+    df['qualifying_gap_to_pole'] = None
+    for (year, circuit), group in df.groupby(['year', 'circuit']):
+        try:
+            pole_time = group['qualifying_lap_time'].min()
+            mask = (df['year'] == year) & (df['circuit'] == circuit)
+            df.loc[mask, 'qualifying_gap_to_pole'] = df.loc[mask, 'qualifying_lap_time'] - pole_time
+        except Exception:
+            pass
+    # Teammate grid delta
+    df['teammate_grid_delta'] = None
+    for (year, circuit, team), group in df.groupby(['year', 'circuit', 'team_name']):
+        if len(group) < 2:
+            continue
+        for idx, row in group.iterrows():
+            teammate_rows = group[group['driver_number'] != row['driver_number']]
+            if not teammate_rows.empty:
+                teammate_grid = teammate_rows['grid_position'].values[0]
+                df.at[idx, 'teammate_grid_delta'] = row['grid_position'] - teammate_grid
+    # Championship standings (driver/team)
+    df['driver_championship_position'] = None
+    df['team_championship_position'] = None
+    # Podiums/points in season
+    df['driver_podiums_season'] = None
+    df['driver_points_season'] = None
+    df['team_points_season'] = None
+    # Track type & overtaking difficulty (static mapping)
+    track_type_map = {'Monaco': 'street', 'Baku': 'street', 'Singapore': 'street', 'Jeddah': 'street'}
+    overtaking_map = {'Monaco': 1, 'Baku': 4, 'Singapore': 2, 'Jeddah': 5}  # Example
+    df['track_type'] = df['circuit'].map(track_type_map).fillna('permanent')
+    df['overtaking_difficulty'] = df['circuit'].map(overtaking_map).fillna(3)
+    # Weather forecast (if available)
+    df['weather_rain_forecast'] = None
     df.to_csv('data/pre_race_features.csv', index=False)
     print(f"Saved {len(df)} rows to data/pre_race_features.csv")
 

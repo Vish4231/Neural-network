@@ -90,29 +90,11 @@ def get_historical_results_with_team():
 
 # --- Main prediction logic ---
 def main():
-    # Load encoders and scaler from training (retrain to save them if needed)
-    # For now, re-fit on all data as in training script (for demo)
-    # In production, save/load encoders/scaler with joblib
-    model = keras.models.load_model('model/pre_race_model.keras')
-    # Load training data to re-fit encoders/scaler
-    train_df = pd.read_csv('data/pre_race_features.csv')
-    cat_features = ['team_name', 'driver_name', 'circuit', 'country_code']
-    num_features = [
-        'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
-        'track_temperature', 'wind_speed', 'driver_form_last3', 'team_form_last3'
-    ]
-    features = num_features + cat_features
-    # Fit encoders
-    from sklearn.preprocessing import LabelEncoder, StandardScaler
-    encoders = {}
-    for col in cat_features:
-        le = LabelEncoder()
-        train_df[col] = train_df[col].astype(str)
-        le.fit(train_df[col])
-        encoders[col] = le
-    scaler = StandardScaler()
-    scaler.fit(train_df[num_features])
-
+    # Load top 5 model
+    import joblib
+    model = keras.models.load_model('model/pre_race_model_top5.keras')
+    encoders = joblib.load('model/encoders_top5.pkl')
+    scaler = joblib.load('model/scaler_top5.pkl')
     # --- Fetch latest race data ---
     session = get_latest_race_session()
     session_key = session['session_key']
@@ -156,33 +138,83 @@ def main():
         team = drv.get('team_name', None)
         team_hist = hist[hist['team_name'] == team].sort_values('session_key')
         row['team_form_last3'] = team_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else None
+        # Advanced features (fill with None or compute if possible)
+        row['qualifying_gap_to_pole'] = None
+        row['teammate_grid_delta'] = None
+        row['track_type'] = 'permanent'  # default
+        row['overtaking_difficulty'] = 3  # default
         rows.append(row)
     df = pd.DataFrame(rows)
-    # Encode categorical
+    # Now safe to encode categoricals and scale numerics
+    cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
     for col in cat_features:
-        df[col] = df[col].astype(str)
-        df[col] = df[col].apply(lambda x: x if x in encoders[col].classes_ else encoders[col].classes_[0])
-        df[col] = encoders[col].transform(df[col])
-    # Scale numeric
+        le = encoders[col]
+        # Map unseen labels to the first class (acts as 'unknown')
+        df[col] = df[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
+        df[col] = le.transform(df[col])
+    num_features = [f for f in features if f not in cat_features]
     df[num_features] = scaler.transform(df[num_features])
-    # Predict
-    preds = np.argmax(model.predict(df[features]), axis=1) + 1
-    df['predicted_finish'] = preds
-    # Output
+    # Predict top 5 probabilities
+    top5_probs = model.predict(df[features]).flatten()
+    df['top5_probability'] = top5_probs
+    # Output top 5
     out = df.copy()
-    out['grid_position'] = grid and [g['position'] for g in grid] or None
     out['driver'] = grid and [driver_map.get(g['driver_number'], {}).get('full_name', g['driver_number']) for g in grid] or None
     out['team'] = grid and [driver_map.get(g['driver_number'], {}).get('team_name', None) for g in grid] or None
-    out = out[['predicted_finish', 'driver', 'team', 'grid_position']]
-    out = out.sort_values('predicted_finish').reset_index(drop=True)
-    out['predicted_finish'] = out.index + 1  # Ensure 1-N order in output
-    # Add podium emojis
-    podium_emojis = ['🥇', '🥈', '🥉'] + [''] * (len(out) - 3)
-    out['podium'] = podium_emojis
-    # Reorder columns for clarity
-    out = out[['predicted_finish', 'podium', 'driver', 'team', 'grid_position']]
-    print("Predicted finishing order for the upcoming race:")
+    out = out[['driver', 'team', 'grid_position', 'top5_probability']]
+    out = out.sort_values('top5_probability', ascending=False).reset_index(drop=True)
+    print("\nTop 5 predicted finishers:")
+    for i, row in out.head(5).iterrows():
+        medal = ['🥇','🥈','🥉','🏅','🏅'][i] if i < 5 else ''
+        print(f"{medal} {row['driver']} ({row['team']}) | Grid: {row['grid_position']} | Top 5 probability: {row['top5_probability']*100:.2f}%")
+    print("\nFull top 5 probability table:")
     print(out.to_string(index=False))
 
+def fetch_and_print_latest_official_results():
+    import requests
+    API = 'https://api.openf1.org/v1'
+    # Get latest race session
+    resp = requests.get(f'{API}/sessions?session_type=Race')
+    try:
+        sessions = resp.json()
+    except Exception:
+        print("Could not parse sessions response as JSON:", resp.text)
+        return
+    if not isinstance(sessions, list):
+        print("Unexpected sessions response:", sessions)
+        return
+    if not sessions:
+        print("No race sessions found.")
+        return
+    latest = sorted(sessions, key=lambda x: x['date_start'])[-1]
+    session_key = latest['session_key']
+    year = latest.get('year', '')
+    circuit = latest.get('circuit_short_name', '')
+    session_name = latest.get('session_name', 'Race')
+    print(f"\nOfficial Results for: {session_name} | {circuit} | {year}")
+    # Fetch results
+    results = requests.get(f'{API}/session_result?session_key={session_key}').json()
+    if not results:
+        print("No results found for this session.")
+        return
+
+    # Try to get driver info for mapping
+    driver_info = {}
+    try:
+        drivers = requests.get(f'{API}/drivers').json()
+        for d in drivers:
+            driver_info[str(d.get('driver_number'))] = d.get('full_name', '')
+    except Exception:
+        pass
+
+    print(f"{'Pos':<4} {'Driver':<20} {'Team':<20} {'Time/Retired':<15}")
+    for r in sorted(results, key=lambda x: int(x['position']) if str(x['position']).isdigit() else 99):
+        pos = r.get('position', '') or ''
+        driver = r.get('full_name') or driver_info.get(str(r.get('driver_number', '')), str(r.get('driver_number', ''))) or ''
+        team = r.get('team_name', '') or ''
+        time_ret = r.get('time') or r.get('retired') or ''
+        print(f"{pos:<4} {driver:<20} {team:<20} {time_ret:<15}")
+
 if __name__ == "__main__":
-    main() 
+    main()
+    fetch_and_print_latest_official_results() 
