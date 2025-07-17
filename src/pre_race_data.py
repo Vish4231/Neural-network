@@ -109,6 +109,18 @@ def main():
             all_rows.append(row)
     df = pd.DataFrame(all_rows)
     df = df.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
+    # Add driver form: average finish last 3 races (prior to current)
+    df = df.sort_values(['driver_number', 'year', 'circuit'])
+    df['finishing_position_int'] = df['finishing_position'].astype(int)
+    df['driver_form_last3'] = (
+        df.groupby('driver_number')['finishing_position_int']
+        .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
+    )
+    # Add team form: average finish last 3 races (prior to current)
+    df['team_form_last3'] = (
+        df.groupby('team_name')['finishing_position_int']
+        .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
+    )
     df.to_csv('data/pre_race_features.csv', index=False)
     print(f"Saved {len(df)} rows to data/pre_race_features.csv")
 
