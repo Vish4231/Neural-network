@@ -12,7 +12,8 @@ import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { getPrediction } from "./api";
 import PredictionResultCard from "./components/PredictionResultCard";
-// import PredictionForm from './components/PredictionForm';
+import PredictionForm from './components/PredictionForm';
+import AboutSection from "./components/AboutSection";
 // import ResultCard from './components/ResultCard';
 
 const App: React.FC = () => {
@@ -45,22 +46,18 @@ const App: React.FC = () => {
           color: "text.primary",
         }}
       >
-        <Container maxWidth="sm" sx={{ py: 4 }}>
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
-            mb={3}
-          >
-            <Typography variant="h4">F1 Top 5 Predictor</Typography>
-            <IconButton
-              onClick={() => setMode(mode === "light" ? "dark" : "light")}
-            >
-              {mode === "light" ? <Brightness4Icon /> : <Brightness7Icon />}
-            </IconButton>
+        <Container maxWidth="sm">
+          <Box sx={{ py: 4 }}>
+            <Typography variant="h3" fontWeight={700} gutterBottom align="center" color="primary">
+              F1 Top 5 Predictor
+            </Typography>
+            <Typography variant="subtitle1" align="center" color="text.secondary" gutterBottom>
+              Predict the Top 5 finishers of any Formula 1 race using only pre-race data.
+            </Typography>
+            <AboutSection />
+            <PredictionForm onSubmit={handlePredict} loading={loading} />
+            <PredictionResultCard loading={loading} error={error} result={result} />
           </Box>
-          {/* <PredictionForm onResult={setResult} loading={loading} setLoading={setLoading} /> */}
-          <PredictionResultCard loading={loading} error={error} result={result} />
         </Container>
       </Box>
     </ThemeProvider>

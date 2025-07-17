@@ -8,7 +8,10 @@ import {
   Slider,
   Grid,
   Typography,
+  Tooltip,
+  IconButton
 } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 const drivers = [
   "Lando NORRIS",
@@ -97,6 +100,14 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, loading }) =>
     <form onSubmit={handleSubmit(onFormSubmit)}>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" display="flex" alignItems="center">
+            Driver
+            <Tooltip title="Select the driver you want to predict for.">
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Typography>
           <Controller
             name="driver_name"
             control={control}
@@ -112,6 +123,14 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, loading }) =>
           />
         </Grid>
         <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" display="flex" alignItems="center">
+            Team
+            <Tooltip title="Select the driver's team for this race.">
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Typography>
           <Controller
             name="team_name"
             control={control}
@@ -127,21 +146,14 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, loading }) =>
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Controller
-            name="circuit"
-            control={control}
-            render={({ field }) => (
-              <TextField select label="Circuit" fullWidth required {...field}>
-                {circuits.map((c) => (
-                  <MenuItem key={c} value={c}>
-                    {c}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" display="flex" alignItems="center">
+            Qualifying Position
+            <Tooltip title="The driver's official qualifying position (after penalties, if any).">
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Typography>
           <Controller
             name="grid_position"
             control={control}
@@ -159,18 +171,51 @@ const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, loading }) =>
             )}
           />
         </Grid>
-        {/* Add more fields as needed, e.g. qualifying_lap_time, weather, form, etc. */}
-        <Grid item xs={12}>
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            fullWidth
-            disabled={loading}
-            size="large"
-          >
-            {loading ? "Predicting..." : "Predict Top 5"}
-          </Button>
+        <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" display="flex" alignItems="center">
+            Track
+            <Tooltip title="The circuit where the race is held.">
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Typography>
+          <Controller
+            name="circuit"
+            control={control}
+            render={({ field }) => (
+              <TextField select label="Circuit" fullWidth required {...field}>
+                {circuits.map((c) => (
+                  <MenuItem key={c} value={c}>
+                    {c}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" display="flex" alignItems="center">
+            Weather
+            <Tooltip title="Expected weather conditions at race start.">
+              <IconButton size="small" sx={{ ml: 0.5 }}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Typography>
+          {/* Add more fields as needed, e.g. qualifying_lap_time, weather, form, etc. */}
+          <Grid item xs={12}>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              fullWidth
+              disabled={loading}
+              size="large"
+            >
+              {loading ? "Predicting..." : "Predict Top 5"}
+            </Button>
+          </Grid>
         </Grid>
       </Grid>
     </form>
