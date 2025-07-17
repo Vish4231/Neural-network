@@ -22,6 +22,6 @@ def build_model(input_dim, tire_compound_vocab_size, num_classes=20):
     model.compile(
         optimizer='adam',
         loss='sparse_categorical_crossentropy',
-        metrics=['accuracy', tf.keras.metrics.TopKCategoricalAccuracy(k=3, name='top_3_acc')]
+        metrics=['accuracy']
     )
     return model 

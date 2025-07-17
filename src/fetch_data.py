@@ -7,6 +7,7 @@ from tensorflow.keras.utils import to_categorical
 import requests
 import pandas as pd
 import os
+import time
 
 def fetch_openf1_car_data(year=2023, limit=10000, save_path="data/car_data.csv"):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -109,7 +110,39 @@ def build_and_train_model(X_train, X_test, y_train, y_test):
     _, acc = model.evaluate(X_test, y_test)
     print(f"Test accuracy: {acc * 100:.2f}%")
 
+def poll_openf1_latest_car_data(poll_interval=10):
+    """
+    Fetch the latest session from OpenF1, extract session_key, and poll car data every poll_interval seconds.
+    Prints session info and number of car data records fetched each poll.
+    """
+    sessions_url = "https://api.openf1.org/v1/sessions"
+    try:
+        sessions = requests.get(sessions_url).json()
+        if not sessions:
+            print("No sessions found from OpenF1 API.")
+            return
+        latest_session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+        print(f"Latest session fields: {list(latest_session.keys())}")
+        session_key = latest_session['session_key']
+        print(f"Latest session: {latest_session.get('session_name', 'N/A')} ({latest_session.get('session_type', 'N/A')})")
+        print(f"Circuit: {latest_session.get('circuit_short_name', 'N/A')}, Country: {latest_session.get('country_name', 'N/A')}")
+        print(f"Session key: {session_key}")
+    except Exception as e:
+        print(f"Error fetching sessions: {e}")
+        return
+
+    car_data_url = f"https://api.openf1.org/v1/car_data?session_key={session_key}"
+    while True:
+        try:
+            car_data = requests.get(car_data_url).json()
+            print(f"Fetched {len(car_data)} car data records at {time.strftime('%X')}")
+        except Exception as e:
+            print(f"Error fetching car data: {e}")
+        time.sleep(poll_interval)
+
 if __name__ == "__main__":
+    print("Polling OpenF1 for latest car data. Press Ctrl+C to stop.")
+    poll_openf1_latest_car_data()
     fetch_openf1_race_results()
     X_train, X_test, y_train, y_test = load_and_prepare_data()
     build_and_train_model(X_train, X_test, y_train, y_test)
