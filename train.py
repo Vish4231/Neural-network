@@ -7,6 +7,12 @@ from src.model import build_model
 # Load data
 df = pd.read_csv('data/f1_race_data_2023_enriched.csv')
 
+# Features to use
+feature_cols = [
+    'qualifying_position', 'constructor_enc', 'driver_enc', 'race_round',
+    'air_temp', 'humidity', 'rain', 'avg_finish_last3'
+]
+
 # Encode categorical features
 le_driver = LabelEncoder()
 le_constructor = LabelEncoder()
@@ -16,14 +22,23 @@ df['driver_enc'] = le_driver.fit_transform(df['driver'])
 df['constructor_enc'] = le_constructor.fit_transform(df['constructor'])
 df['tire_enc'] = le_tire.fit_transform(df['tire_compound'].fillna('Unknown'))
 
-# Features and target
-feature_cols = [
-    'qualifying_position', 'constructor_enc', 'driver_enc', 'race_round',
-    'air_temp', 'humidity', 'rain', 'avg_finish_last3'
-]
+# Impute avg_finish_last3 for early races
+df['avg_finish_last3'] = df['avg_finish_last3'].fillna(10)
+
+# Print NaN diagnostics
+print("Any NaNs in features before drop:", df[feature_cols].isnull().any().any())
+print("Any NaNs in tire_enc before drop:", df['tire_enc'].isnull().any())
+print("Any NaNs in finishing_position before drop:", df['finishing_position'].isnull().any())
+print("Rows with NaNs in features:")
+print(df[df[feature_cols].isnull().any(axis=1)])
+
+# Drop rows with any NaNs in features, tire, or label
+df = df.dropna(subset=feature_cols + ['tire_enc', 'finishing_position'])
+
 X_num = df[feature_cols].values
 X_tire = df['tire_enc'].values
 y = df['finishing_position'].values - 1  # 0-indexed for softmax
+y = y.astype(int).reshape(-1)
 
 # Scale numerical features
 scaler = StandardScaler()
