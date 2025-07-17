@@ -94,7 +94,8 @@ def main():
         'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
         'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
         'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
-        'track_type', 'overtaking_difficulty'
+        'track_type', 'overtaking_difficulty',
+        'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
     ]
     # Load top 5 model
     import joblib
@@ -160,6 +161,10 @@ def main():
         df[col] = le.transform(df[col])
     num_features = [f for f in features if f not in cat_features]
     df[num_features] = scaler.transform(df[num_features])
+    # Fill missing championship/points features with -1
+    for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
+        if col in df.columns:
+            df[col] = df[col].fillna(-1)
     # Predict top 5 probabilities
     top5_probs = model.predict(df[features]).flatten()
     df['top5_probability'] = top5_probs

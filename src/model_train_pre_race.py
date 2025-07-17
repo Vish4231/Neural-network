@@ -19,9 +19,17 @@ features = [
     'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
     'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
     'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
-    'track_type', 'overtaking_difficulty'
+    'track_type', 'overtaking_difficulty',
+    'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
 ]
 target = 'finishing_position'
+
+# Fill missing championship/points features with -1 before dropping rows
+for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
+    if col in df.columns:
+        df[col] = df[col].fillna(-1)
+
+# Now dropna for the rest
 print("Missing values per feature BEFORE dropna:")
 print(df[features + [target]].isnull().sum())
 df = df.dropna(subset=features + [target])

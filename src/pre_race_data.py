@@ -141,13 +141,48 @@ def main():
             if not teammate_rows.empty:
                 teammate_grid = teammate_rows['grid_position'].values[0]
                 df.at[idx, 'teammate_grid_delta'] = row['grid_position'] - teammate_grid
-    # Championship standings (driver/team)
+    # Championship position and points (driver/team)
     df['driver_championship_position'] = None
     df['team_championship_position'] = None
-    # Podiums/points in season
-    df['driver_podiums_season'] = None
     df['driver_points_season'] = None
     df['team_points_season'] = None
+    for (year, circuit), group in df.groupby(['year', 'circuit']):
+        # Fetch standings up to this race (not including this race)
+        try:
+            import requests
+            # Get all sessions for this year
+            sessions = requests.get(f'https://api.openf1.org/v1/sessions?year={year}&session_type=Race').json()
+            sessions = sorted(sessions, key=lambda x: x['date_start'])
+            this_session = [s for s in sessions if s.get('circuit_short_name') == circuit]
+            if not this_session:
+                continue
+            idx = sessions.index(this_session[0])
+            if idx == 0:
+                continue  # No prior races
+            prev_sessions = sessions[:idx]
+            # Get last session_key before this race
+            last_session_key = prev_sessions[-1]['session_key']
+            # Fetch driver standings
+            standings = requests.get(f'https://api.openf1.org/v1/driver_standings?session_key={last_session_key}').json()
+            driver_standings = {s['driver_number']: s for s in standings}
+            # Fetch constructor standings
+            constructors = requests.get(f'https://api.openf1.org/v1/constructor_standings?session_key={last_session_key}').json()
+            team_standings = {s['team_name']: s for s in constructors}
+            mask = (df['year'] == year) & (df['circuit'] == circuit)
+            for idx2, row in df[mask].iterrows():
+                drv_num = row['driver_number']
+                team = row['team_name']
+                drv_stand = driver_standings.get(str(drv_num))
+                if drv_stand:
+                    df.at[idx2, 'driver_championship_position'] = drv_stand.get('position')
+                    df.at[idx2, 'driver_points_season'] = drv_stand.get('points')
+                team_stand = team_standings.get(team)
+                if team_stand:
+                    df.at[idx2, 'team_championship_position'] = team_stand.get('position')
+                    df.at[idx2, 'team_points_season'] = team_stand.get('points')
+        except Exception as e:
+            print(f"Warning: Could not fetch standings for {year} {circuit}: {e}")
+            continue
     # Track type & overtaking difficulty (static mapping)
     track_type_map = {'Monaco': 'street', 'Baku': 'street', 'Singapore': 'street', 'Jeddah': 'street'}
     overtaking_map = {'Monaco': 1, 'Baku': 4, 'Singapore': 2, 'Jeddah': 5}  # Example
@@ -155,6 +190,19 @@ def main():
     df['overtaking_difficulty'] = df['circuit'].map(overtaking_map).fillna(3)
     # Weather forecast (if available)
     df['weather_rain_forecast'] = None
+    # Filter out rows where finishing_position is not a valid integer (e.g., DQ, DNS, DNF)
+    def is_int_str(x):
+        try:
+            int(x)
+            return True
+        except:
+            return False
+    invalid_rows = ~df['finishing_position'].apply(is_int_str)
+    if invalid_rows.any():
+        print(f"Dropping {invalid_rows.sum()} rows with non-integer finishing_position values: {df.loc[invalid_rows, 'finishing_position'].unique().tolist()}")
+        df = df[~invalid_rows]
+    df['finishing_position'] = df['finishing_position'].astype(int)
+    df['finishing_position_int'] = df['finishing_position']
     df.to_csv('data/pre_race_features.csv', index=False)
     print(f"Saved {len(df)} rows to data/pre_race_features.csv")
 
