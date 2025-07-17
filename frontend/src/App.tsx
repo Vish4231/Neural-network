@@ -15,7 +15,6 @@ import PredictionResultCard from "./components/PredictionResultCard";
 import PredictionForm from './components/PredictionForm';
 import AboutSection from "./components/AboutSection";
 import Footer from "./components/Footer";
-import F1CarBanner from "./components/F1CarBanner";
 // import ResultCard from './components/ResultCard';
 
 const App: React.FC = () => {
@@ -48,15 +47,30 @@ const App: React.FC = () => {
           color: "text.primary",
         }}
       >
-        <F1CarBanner />
         <Container maxWidth="sm" sx={{
-          py: 4,
-          backgroundImage: 'repeating-linear-gradient(135deg, #fff 0 8px, #e0e0e0 8px 16px)',
-          borderRadius: 3,
-          boxShadow: 3,
-          mt: 2
+          py: 6,
+          minHeight: '80vh',
+          position: 'relative',
+          background: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}>
-          <Box sx={{ py: 4 }}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0.07,
+              zIndex: 0,
+              background: 'url("/f1-silhouette.svg") center/80% no-repeat',
+              pointerEvents: 'none',
+            }}
+          />
+          <Box sx={{ position: 'relative', zIndex: 1, width: '100%' }}>
             <Typography variant="h3" fontWeight={700} gutterBottom align="center" color="primary">
               F1 Top 5 Predictor
             </Typography>

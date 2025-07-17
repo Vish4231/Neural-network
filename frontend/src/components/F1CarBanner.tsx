@@ -3,25 +3,27 @@ import React from "react";
 const F1CarBanner: React.FC = () => (
   <div style={{
     width: "100%",
-    background: "linear-gradient(90deg, #e10600 0%, #181818 100%)",
+    background: "linear-gradient(90deg, #0d0d0d 0%, #1a1a1a 100%)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    padding: "24px 0 12px 0"
+    padding: "32px 0",
+    borderBottom: "2px solid #e10600",
+    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.5)"
   }}>
-    <svg width="320" height="64" viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="28" width="320" height="8" rx="4" fill="#222" opacity="0.2" />
+    <svg width="360" height="72" viewBox="0 0 360 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="30" width="360" height="8" rx="4" fill="#444" opacity="0.3" />
       <g>
-        <rect x="60" y="36" width="200" height="12" rx="6" fill="#e10600" />
-        <rect x="80" y="24" width="160" height="16" rx="8" fill="#fff" />
-        <rect x="120" y="16" width="80" height="16" rx="8" fill="#222" />
-        <ellipse cx="80" cy="52" rx="12" ry="8" fill="#181818" />
-        <ellipse cx="240" cy="52" rx="12" ry="8" fill="#181818" />
-        <rect x="150" y="8" width="20" height="8" rx="4" fill="#e10600" />
-        <rect x="160" y="0" width="8" height="8" rx="4" fill="#fff" />
+        <rect x="70" y="38" width="220" height="14" rx="7" fill="#e10600" />
+        <rect x="90" y="26" width="180" height="18" rx="9" fill="#fff" />
+        <rect x="130" y="18" width="100" height="16" rx="8" fill="#2b2b2b" />
+        <ellipse cx="90" cy="58" rx="14" ry="9" fill="#1f1f1f" />
+        <ellipse cx="270" cy="58" rx="14" ry="9" fill="#1f1f1f" />
+        <rect x="165" y="10" width="24" height="8" rx="4" fill="#e10600" />
+        <rect x="176" y="2" width="8" height="8" rx="4" fill="#ffffff" />
       </g>
     </svg>
   </div>
 );
 
-export default F1CarBanner; 
+export default F1CarBanner;

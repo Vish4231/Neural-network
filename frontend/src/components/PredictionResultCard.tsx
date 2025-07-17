@@ -1,6 +1,7 @@
 import React from "react";
 import { Card, CardContent, Typography, CircularProgress, Box, Avatar, Stack } from "@mui/material";
 import { motion } from "framer-motion";
+import DirectionsCarFilledIcon from "@mui/icons-material/DirectionsCarFilled";
 
 interface PredictionResultCardProps {
   loading: boolean;
@@ -13,31 +14,6 @@ const getInitials = (name: string) => {
   return parts.map((p) => p[0]).join("").toUpperCase();
 };
 
-const F1CarSVG = () => (
-  <motion.svg
-    width="120"
-    height="32"
-    viewBox="0 0 320 64"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    initial={{ x: -160, opacity: 0 }}
-    animate={{ x: 0, opacity: 1 }}
-    transition={{ duration: 0.7, type: "spring", bounce: 0.3 }}
-    style={{ margin: '0 auto', display: 'block' }}
-  >
-    <rect x="0" y="28" width="120" height="8" rx="4" fill="#222" opacity="0.2" />
-    <g>
-      <rect x="20" y="36" width="80" height="12" rx="6" fill="#e10600" />
-      <rect x="30" y="24" width="60" height="16" rx="8" fill="#fff" />
-      <rect x="45" y="16" width="30" height="16" rx="8" fill="#222" />
-      <ellipse cx="30" cy="52" rx="8" ry="6" fill="#181818" />
-      <ellipse cx="90" cy="52" rx="8" ry="6" fill="#181818" />
-      <rect x="55" y="8" width="10" height="8" rx="4" fill="#e10600" />
-      <rect x="60" y="0" width="4" height="8" rx="2" fill="#fff" />
-    </g>
-  </motion.svg>
-);
-
 const PredictionResultCard: React.FC<PredictionResultCardProps> = ({ loading, error, result }) => {
   if (loading) {
     return (
@@ -48,7 +24,7 @@ const PredictionResultCard: React.FC<PredictionResultCardProps> = ({ loading, er
   }
   if (error) {
     return (
-      <Card sx={{ mt: 3, border: "2px solid #e10600" }}>
+      <Card sx={{ mt: 3, border: "2px solid #e10600", boxShadow: 3, borderRadius: 3 }}>
         <CardContent>
           <Typography color="error" variant="h6">{error}</Typography>
         </CardContent>
@@ -58,9 +34,11 @@ const PredictionResultCard: React.FC<PredictionResultCardProps> = ({ loading, er
   if (!result) return null;
   return (
     <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-      <Card sx={{ mt: 3, boxShadow: 6, transition: "0.3s", border: "2px solid #e10600" }}>
+      <Card sx={{ mt: 3, boxShadow: 3, border: "2px solid #e10600", borderRadius: 3 }}>
         <CardContent>
-          <F1CarSVG />
+          <Box display="flex" justifyContent="center" alignItems="center" mb={1}>
+            <DirectionsCarFilledIcon sx={{ color: '#e10600', fontSize: 32, opacity: 0.3 }} />
+          </Box>
           <Typography variant="h5" gutterBottom align="center">
             Predicted Top 5 Finishers
           </Typography>
