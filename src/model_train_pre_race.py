@@ -15,7 +15,8 @@ df = pd.read_csv(DATA_PATH)
 # Drop rows with missing target or grid position
 features = [
     'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
-    'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code'
+    'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
+    'driver_form_last3', 'team_form_last3'
 ]
 target = 'finishing_position'
 df = df.dropna(subset=features + [target])
