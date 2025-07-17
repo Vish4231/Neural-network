@@ -102,6 +102,10 @@ def main():
     model = keras.models.load_model('model/pre_race_model_top5.keras')
     encoders = joblib.load('model/encoders_top5.pkl')
     scaler = joblib.load('model/scaler_top5.pkl')
+    # Load XGBoost model
+    import xgboost as xgb
+    xgb_model = xgb.XGBClassifier()
+    xgb_model.load_model('model/xgb_top5.model')
     # --- Fetch latest race data ---
     session = get_latest_race_session()
     session_key = session['session_key']
@@ -152,6 +156,10 @@ def main():
         row['overtaking_difficulty'] = 3  # default
         rows.append(row)
     df = pd.DataFrame(rows)
+    # Ensure all required features are present
+    for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
+        if col not in df.columns:
+            df[col] = -1
     # Now safe to encode categoricals and scale numerics
     cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
     for col in cat_features:
@@ -165,21 +173,44 @@ def main():
     for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
         if col in df.columns:
             df[col] = df[col].fillna(-1)
+    # Fill all NaNs in features with -1
+    df[features] = df[features].fillna(-1)
+    # Ensure all numeric columns are float
+    for col in features:
+        if col not in cat_features:
+            df[col] = df[col].astype(float)
+    # Debug: print NaN status and dtypes
+    print("Any NaNs in features before prediction?", df[features].isnull().any().any())
+    print("Columns with NaNs:", df[features].columns[df[features].isnull().any()].tolist())
+    print(df[features].dtypes)
+    print(df[features].head())
     # Predict top 5 probabilities
-    top5_probs = model.predict(df[features]).flatten()
-    df['top5_probability'] = top5_probs
-    # Output top 5
+    # Predict with neural net
+    nn_probs = model.predict(df[features]).flatten()
+    # Predict with XGBoost
+    xgb_probs = xgb_model.predict_proba(df[features])[:,1]
+    # Ensemble: average probabilities
+    ensemble_probs = (nn_probs + xgb_probs) / 2
+    df['top5_probability_nn'] = nn_probs
+    df['top5_probability_xgb'] = xgb_probs
+    df['top5_probability_ensemble'] = ensemble_probs
+    # Output top 5 for each
     out = df.copy()
     out['driver'] = grid and [driver_map.get(g['driver_number'], {}).get('full_name', g['driver_number']) for g in grid] or None
     out['team'] = grid and [driver_map.get(g['driver_number'], {}).get('team_name', None) for g in grid] or None
-    out = out[['driver', 'team', 'grid_position', 'top5_probability']]
-    out = out.sort_values('top5_probability', ascending=False).reset_index(drop=True)
-    print("\nTop 5 predicted finishers:")
+    out = out[['driver', 'team', 'grid_position', 'top5_probability_nn', 'top5_probability_xgb', 'top5_probability_ensemble']]
+    out = out.sort_values('top5_probability_ensemble', ascending=False).reset_index(drop=True)
+    print("\nTop 5 predicted finishers (Ensemble):")
     for i, row in out.head(5).iterrows():
         medal = ['🥇','🥈','🥉','🏅','🏅'][i] if i < 5 else ''
-        print(f"{medal} {row['driver']} ({row['team']}) | Grid: {row['grid_position']} | Top 5 probability: {row['top5_probability']*100:.2f}%")
-    print("\nFull top 5 probability table:")
+        print(f"{medal} {row['driver']} ({row['team']}) | Grid: {row['grid_position']} | Ensemble Top 5 probability: {row['top5_probability_ensemble']*100:.2f}%")
+    print("\nFull top 5 probability table (Ensemble):")
     print(out.to_string(index=False))
+    # Optionally, print top 5s for each model
+    print("\nTop 5 predicted finishers (Neural Net only):")
+    print(out.sort_values('top5_probability_nn', ascending=False).head(5)[['driver','team','grid_position','top5_probability_nn']])
+    print("\nTop 5 predicted finishers (XGBoost only):")
+    print(out.sort_values('top5_probability_xgb', ascending=False).head(5)[['driver','team','grid_position','top5_probability_xgb']])
 
 def fetch_and_print_latest_official_results():
     import requests
