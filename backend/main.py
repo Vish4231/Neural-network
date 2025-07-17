@@ -118,37 +118,39 @@ def predict(req: PredictionRequest):
         return {"error": f"Event '{event_name}' not found in {season} schedule."}
     rnd = int(event_row.iloc[0]['RoundNumber'])
     # Get entry list for the event
-    event = fastf1.get_event(season, rnd)
-    session = event.get_race()
+    session = fastf1.get_session(season, rnd, 'R')
     session.load(telemetry=False, weather=False, laps=False)
-    entry_list = session.entry_list
-    results = []
-    probs = {}
-    for drv in entry_list:
-        driver = entry_list[drv]['FullName']
-        team = entry_list[drv]['TeamName']
-        features = DEFAULT_FEATURES.copy()
-        features["circuit"] = circuit
-        features["driver_name"] = driver
-        features["team_name"] = team
-        # Prepare input
-        X = []
-        for f in FEATURES:
-            val = features.get(f, -1)
-            if f in encoders:
-                le = encoders[f]
-                val = le.transform([str(val) if val is not None else "unknown"])[0]
-            X.append(val)
-        X = np.array(X).reshape(1, -1)
-        # Scale numerics
-        num_features = [f for f in FEATURES if f not in encoders]
-        X_num = scaler.transform(X[:, [FEATURES.index(f) for f in num_features]])
-        for i, f in enumerate(num_features):
-            X[0, FEATURES.index(f)] = X_num[0, i]
-        prob = xgb_model.predict_proba(X)[0, 1]
-        results.append((driver, prob))
-        probs[driver] = float(prob)
-    # Sort and get top 5
-    results.sort(key=lambda x: x[1], reverse=True)
-    top5 = [d for d, _ in results[:5]]
-    return {"top5": top5, "probabilities": probs} 
+    if hasattr(session, 'results') and session.results is not None:
+        entry_list = session.results
+        results = []
+        probs = {}
+        for _, row in entry_list.iterrows():
+            driver = row['FullName']
+            team = row['TeamName']
+            features = DEFAULT_FEATURES.copy()
+            features["circuit"] = circuit
+            features["driver_name"] = driver
+            features["team_name"] = team
+            # Prepare input
+            X = []
+            for f in FEATURES:
+                val = features.get(f, -1)
+                if f in encoders:
+                    le = encoders[f]
+                    val = le.transform([str(val) if val is not None else "unknown"])[0]
+                X.append(val)
+            X = np.array(X).reshape(1, -1)
+            # Scale numerics
+            num_features = [f for f in FEATURES if f not in encoders]
+            X_num = scaler.transform(X[:, [FEATURES.index(f) for f in num_features]])
+            for i, f in enumerate(num_features):
+                X[0, FEATURES.index(f)] = X_num[0, i]
+            prob = xgb_model.predict_proba(X)[0, 1]
+            results.append((driver, prob))
+            probs[driver] = float(prob)
+        # Sort and get top 5
+        results.sort(key=lambda x: x[1], reverse=True)
+        top5 = [d for d, _ in results[:5]]
+        return {"top5": top5, "probabilities": probs}
+    else:
+        return {"error": "No entry list/results available for this event. Try a past race or check FastF1 data availability."} 
