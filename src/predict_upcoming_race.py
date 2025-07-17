@@ -5,13 +5,17 @@ import os
 import joblib
 from tensorflow import keras
 
+YEAR = 2025  # Set to None for latest, or specify a year (e.g., 2025)
+
 # --- Helper functions (reuse from pre_race_data.py logic) ---
 def get_latest_race_session():
     url = "https://api.openf1.org/v1/sessions?session_type=Race"
+    if YEAR is not None:
+        url += f"&year={YEAR}"
     resp = requests.get(url)
     sessions = resp.json()
     if not sessions:
-        raise Exception("No race sessions found.")
+        raise Exception(f"No race sessions found for year {YEAR}.")
     latest = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
     return latest
 
@@ -116,6 +120,8 @@ def main():
     year = session['year']
     circuit = session.get('circuit_short_name', None)
     country = session.get('country_name', None)
+    session_name = session.get('session_name', 'Race')
+    print(f"Predicting for: {session_name} | {circuit} | {country} | {year}")
     grid = get_starting_grid(session_key)
     drivers = get_driver_info(session_key)
     driver_map = {d['driver_number']: d for d in drivers}
@@ -170,6 +176,11 @@ def main():
     out = out[['predicted_finish', 'driver', 'team', 'grid_position']]
     out = out.sort_values('predicted_finish').reset_index(drop=True)
     out['predicted_finish'] = out.index + 1  # Ensure 1-N order in output
+    # Add podium emojis
+    podium_emojis = ['🥇', '🥈', '🥉'] + [''] * (len(out) - 3)
+    out['podium'] = podium_emojis
+    # Reorder columns for clarity
+    out = out[['predicted_finish', 'podium', 'driver', 'team', 'grid_position']]
     print("Predicted finishing order for the upcoming race:")
     print(out.to_string(index=False))
 

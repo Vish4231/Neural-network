@@ -21,7 +21,6 @@ features = [
 target = 'finishing_position'
 df = df.dropna(subset=features + [target])
 
-# Filter out rows where finishing_position is not a valid integer (e.g., DQ, DNS, DNF)
 def is_int_str(x):
     try:
         int(x)
@@ -33,6 +32,10 @@ if invalid_rows.any():
     print(f"Dropping {invalid_rows.sum()} rows with non-integer finishing_position values: {df.loc[invalid_rows, target].unique().tolist()}")
     df = df[~invalid_rows]
 
+df[target] = df[target].astype(int)
+# New binary target: is_podium (1 if finishing_position <= 3, else 0)
+df['is_podium'] = (df[target] <= 3).astype(int)
+
 # Encode categorical features
 cat_features = ['team_name', 'driver_name', 'circuit', 'country_code']
 encoders = {}
@@ -43,7 +46,7 @@ for col in cat_features:
 
 # Prepare X, y
 X = df[features]
-y = df[target].astype(int) - 1  # zero-based for Keras
+y = df['is_podium']
 
 # Scale numeric features
 num_features = [f for f in features if f not in cat_features]
@@ -53,7 +56,7 @@ X[num_features] = scaler.fit_transform(X[num_features])
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# Build model
+# Build binary classifier
 model = keras.Sequential([
     layers.Input(shape=(X.shape[1],)),
     layers.Dense(128, activation='relu'),
@@ -64,29 +67,31 @@ model = keras.Sequential([
     layers.Dropout(0.2),
     layers.Dense(32, activation='relu'),
     layers.BatchNormalization(),
-    layers.Dense(20, activation='softmax')
+    layers.Dense(1, activation='sigmoid')
 ])
-model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # Train
 history = model.fit(X_train, y_train, epochs=40, batch_size=16, validation_data=(X_test, y_test))
 
 # Evaluate
-y_pred = np.argmax(model.predict(X_test), axis=1)
+y_pred_prob = model.predict(X_test).flatten()
+y_pred = (y_pred_prob >= 0.5).astype(int)
 acc = accuracy_score(y_test, y_pred)
-print(f"Test accuracy: {acc*100:.2f}%")
+print(f"Test accuracy (top 3 prediction): {acc*100:.2f}%")
 print("Confusion matrix:")
 print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred, zero_division=0))
 
 # Save model
 os.makedirs('model', exist_ok=True)
-model.save('model/pre_race_model.keras')
-print("Model saved to model/pre_race_model.keras")
+model.save('model/pre_race_model_podium.keras')
+print("Model saved to model/pre_race_model_podium.keras")
 
 # Print sample predictions
 sample = X_test.sample(5, random_state=42)
-preds = np.argmax(model.predict(sample), axis=1) + 1
-print("Sample predictions (grid_position, predicted_finish, true_finish):")
+preds = model.predict(sample).flatten()
+preds_bin = (preds >= 0.5).astype(int)
+print("Sample predictions (grid_position, predicted_podium, true_podium):")
 for i, idx in enumerate(sample.index):
-    print(f"Grid: {int(df.loc[idx, 'grid_position'])}, Pred: {preds[i]}, True: {int(df.loc[idx, target])}") 
+    print(f"Grid: {int(df.loc[idx, 'grid_position'])}, Pred: {preds_bin[i]}, True: {int(df.loc[idx, 'is_podium'])}") 
