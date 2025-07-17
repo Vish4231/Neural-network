@@ -58,13 +58,12 @@ export type PredictionFormData = {
   team_points_season: number;
 };
 
-interface Props {
-  onResult: (data: PredictionFormData) => void;
+interface PredictionFormProps {
+  onSubmit: (formData: any) => void;
   loading: boolean;
-  setLoading: (b: boolean) => void;
 }
 
-const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
+const PredictionForm: React.FC<PredictionFormProps> = ({ onSubmit, loading }) => {
   const { control, handleSubmit } = useForm<PredictionFormData>({
     defaultValues: {
       driver_name: "",
@@ -90,13 +89,12 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
     },
   });
 
+  const onFormSubmit = (data: any) => {
+    onSubmit(data);
+  };
+
   return (
-    <form
-      onSubmit={handleSubmit((data) => {
-        setLoading(true);
-        onResult(data);
-      })}
-    >
+    <form onSubmit={handleSubmit(onFormSubmit)}>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           <Controller
@@ -171,7 +169,7 @@ const PredictionForm: React.FC<Props> = ({ onResult, loading, setLoading }) => {
             disabled={loading}
             size="large"
           >
-            Predict
+            {loading ? "Predicting..." : "Predict Top 5"}
           </Button>
         </Grid>
       </Grid>

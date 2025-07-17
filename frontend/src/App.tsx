@@ -10,13 +10,30 @@ import {
 import { getTheme } from "./theme";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
+import { getPrediction } from "./api";
+import PredictionResultCard from "./components/PredictionResultCard";
 // import PredictionForm from './components/PredictionForm';
 // import ResultCard from './components/ResultCard';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<"light" | "dark">("dark");
-  // const [result, setResult] = useState<number | null>(null);
-  // const [loading, setLoading] = useState(false);
+  const [result, setResult] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | undefined>(undefined);
+
+  const handlePredict = async (formData: any) => {
+    setLoading(true);
+    setError(undefined);
+    setResult(null);
+    try {
+      const res = await getPrediction(formData);
+      setResult(res);
+    } catch (err: any) {
+      setError(err.message || "Prediction failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ThemeProvider theme={getTheme(mode)}>
@@ -43,7 +60,7 @@ const App: React.FC = () => {
             </IconButton>
           </Box>
           {/* <PredictionForm onResult={setResult} loading={loading} setLoading={setLoading} /> */}
-          {/* <ResultCard probability={result} loading={loading} /> */}
+          <PredictionResultCard loading={loading} error={error} result={result} />
         </Container>
       </Box>
     </ThemeProvider>
