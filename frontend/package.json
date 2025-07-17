@@ -34,6 +34,7 @@
     "eject": "react-scripts eject",
     "lint": "eslint src --ext .ts,.tsx"
   },
+  "proxy": "http://localhost:8001",
   "browserslist": {
     "production": [
       ">0.2%",
