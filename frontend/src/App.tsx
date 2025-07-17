@@ -14,6 +14,7 @@ import { getPrediction } from "./api";
 import PredictionResultCard from "./components/PredictionResultCard";
 import PredictionForm from './components/PredictionForm';
 import AboutSection from "./components/AboutSection";
+import Footer from "./components/Footer";
 // import ResultCard from './components/ResultCard';
 
 const App: React.FC = () => {
@@ -59,6 +60,7 @@ const App: React.FC = () => {
             <PredictionResultCard loading={loading} error={error} result={result} />
           </Box>
         </Container>
+        <Footer />
       </Box>
     </ThemeProvider>
   );
