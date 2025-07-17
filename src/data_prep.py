@@ -7,9 +7,6 @@ from collections import defaultdict
 def get_race_data(year=2023):
     ergast = Ergast()
     content = ergast.get_race_results(season=year).content
-    print("Type of content:", type(content))
-    print("Length of content:", len(content))
-    print("First element of content:", content[0] if len(content) > 0 else "EMPTY")
     # Each element in content is a DataFrame for a round
     flat_content = []
     for idx, df in enumerate(content):
@@ -17,42 +14,24 @@ def get_race_data(year=2023):
             df = df.copy()
             df['round'] = idx + 1  # round numbers are 1-indexed
             flat_content.append(df)
-    # Debug: inspect structure
-    print("Type of flat_content:", type(flat_content))
-    print("Length of flat_content:", len(flat_content))
-    print("First 3 elements:", flat_content[:3])
-    print("Types of first 3 elements:", [type(x) for x in flat_content[:3]])
-    # Concatenate DataFrames
     races = pd.concat(flat_content, ignore_index=True)
-    print("Columns in races DataFrame:", races.columns.tolist())
     races = races[races['position'].notna()]
-    # Fetch qualifying results using FastF1 session.results with debug
+    # Fetch qualifying results using FastF1 session.results
     quali_results = []
     for rnd in races['round'].unique():
         try:
             session = fastf1.get_session(year, int(rnd), 'Q')
             session.load()
-            print(f"Round {rnd}: session.results is None? {session.results is None}")
             if hasattr(session, 'results') and session.results is not None:
-                print(f"session.results shape: {session.results.shape}")
-                print(session.results.head())
                 for _, row in session.results.iterrows():
                     quali_results.append({
                         'round': rnd,
                         'driver': str(row['DriverNumber']),
                         'qualifying_position': row['Position']
                     })
-            else:
-                print(f"No results for round {rnd}")
         except Exception as e:
-            print(f"Exception for round {rnd}: {e}")
             continue
     quali_df = pd.DataFrame(quali_results)
-    print("Quali DF shape:", quali_df.shape)
-    print("Quali DF head:\n", quali_df.head())
-    print("Races DF number sample:", races['number'].unique()[:5])
-    print("Quali DF driver sample:", quali_df['driver'].unique()[:5] if not quali_df.empty else 'EMPTY')
-    # Merge on car number as string
     races['number'] = races['number'].astype(str)
     quali_df['driver'] = quali_df['driver'].astype(str)
     df = pd.merge(
@@ -62,8 +41,6 @@ def get_race_data(year=2023):
         right_on=['round', 'driver'],
         how='left'
     )
-    print("Merged DF shape:", df.shape)
-    print("Merged DF head:\n", df.head())
     df['finishing_position'] = df['position'].astype(int)
     df['constructor'] = df['constructorId']
     df['driver'] = df['driverId']
