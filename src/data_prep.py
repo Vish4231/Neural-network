@@ -7,11 +7,16 @@ from collections import defaultdict
 def get_race_data(year=2023):
     ergast = Ergast()
     content = ergast.get_race_results(season=year).content
-    # Flatten the list of lists into a single list of dicts
-    if isinstance(content, list) and len(content) > 0 and isinstance(content[0], list):
-        flat_content = [item for sublist in content for item in sublist]
-    else:
-        flat_content = content
+    print("Type of content:", type(content))
+    print("Length of content:", len(content))
+    print("First element of content:", content[0] if len(content) > 0 else "EMPTY")
+    # Each element in content is a DataFrame for a round
+    flat_content = []
+    for idx, df in enumerate(content):
+        if hasattr(df, 'copy'):
+            df = df.copy()
+            df['round'] = idx + 1  # round numbers are 1-indexed
+            flat_content.append(df)
     # Debug: inspect structure
     print("Type of flat_content:", type(flat_content))
     print("Length of flat_content:", len(flat_content))
@@ -19,7 +24,8 @@ def get_race_data(year=2023):
     print("Types of first 3 elements:", [type(x) for x in flat_content[:3]])
     # Concatenate DataFrames
     races = pd.concat(flat_content, ignore_index=True)
-    races = races[races['positionOrder'].notna()]
+    print("Columns in races DataFrame:", races.columns.tolist())
+    races = races[races['position'].notna()]
     # Fetch qualifying results using FastF1
     quali_results = []
     for rnd in races['round'].unique():
@@ -43,11 +49,11 @@ def get_race_data(year=2023):
         right_on=['round', 'driver'],
         how='left'
     )
-    df['finishing_position'] = df['positionOrder'].astype(int)
+    df['finishing_position'] = df['position'].astype(int)
     df['constructor'] = df['constructorId']
     df['driver'] = df['driverId']
-    df['race_name'] = df['raceName']
-    df['season'] = df['season']
+    df['race_name'] = df['raceName'] if 'raceName' in df.columns else df['constructorName']
+    df['season'] = df['season'] if 'season' in df.columns else year
     df['race_round'] = df['round']
     # Weather and tire features
     weather_features = defaultdict(dict)
