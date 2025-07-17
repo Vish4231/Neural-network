@@ -15,6 +15,7 @@ import PredictionResultCard from "./components/PredictionResultCard";
 import PredictionForm from './components/PredictionForm';
 import AboutSection from "./components/AboutSection";
 import Footer from "./components/Footer";
+import F1CarBanner from "./components/F1CarBanner";
 // import ResultCard from './components/ResultCard';
 
 const App: React.FC = () => {
@@ -47,7 +48,14 @@ const App: React.FC = () => {
           color: "text.primary",
         }}
       >
-        <Container maxWidth="sm">
+        <F1CarBanner />
+        <Container maxWidth="sm" sx={{
+          py: 4,
+          backgroundImage: 'repeating-linear-gradient(135deg, #fff 0 8px, #e0e0e0 8px 16px)',
+          borderRadius: 3,
+          boxShadow: 3,
+          mt: 2
+        }}>
           <Box sx={{ py: 4 }}>
             <Typography variant="h3" fontWeight={700} gutterBottom align="center" color="primary">
               F1 Top 5 Predictor
