@@ -90,6 +90,12 @@ def get_historical_results_with_team():
 
 # --- Main prediction logic ---
 def main():
+    features = [
+        'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
+        'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
+        'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
+        'track_type', 'overtaking_difficulty'
+    ]
     # Load top 5 model
     import joblib
     model = keras.models.load_model('model/pre_race_model_top5.keras')
