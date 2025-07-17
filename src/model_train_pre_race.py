@@ -20,6 +20,18 @@ features = [
 target = 'finishing_position'
 df = df.dropna(subset=features + [target])
 
+# Filter out rows where finishing_position is not a valid integer (e.g., DQ, DNS, DNF)
+def is_int_str(x):
+    try:
+        int(x)
+        return True
+    except:
+        return False
+invalid_rows = ~df[target].apply(is_int_str)
+if invalid_rows.any():
+    print(f"Dropping {invalid_rows.sum()} rows with non-integer finishing_position values: {df.loc[invalid_rows, target].unique().tolist()}")
+    df = df[~invalid_rows]
+
 # Encode categorical features
 cat_features = ['team_name', 'driver_name', 'circuit', 'country_code']
 encoders = {}
