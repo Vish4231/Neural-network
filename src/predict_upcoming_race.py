@@ -6,29 +6,6 @@ import joblib
 from tensorflow import keras
 from datetime import datetime, timezone
 import argparse
-import time
-from typing import Optional
-
-# Rate limiting wrapper
-def api_request_with_retry(url: str, max_retries: int = 3, delay: float = 1.0) -> Optional[requests.Response]:
-    """Make API request with retry logic for rate limiting"""
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                return response
-            elif response.status_code == 429:  # Rate limited
-                wait_time = delay * (2 ** attempt)  # Exponential backoff
-                print(f"Rate limited (429), waiting {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
-                time.sleep(wait_time)
-            else:
-                print(f"API error: {response.status_code} - {response.text[:100]}")
-                return response
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-    return None
 
 # Remove hardcoded YEAR = 2025
 # Add argument parsing at the top of main()
@@ -56,38 +33,27 @@ def main():
 
     def get_starting_grid(session_key):
         url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
-        resp = api_request_with_retry(url)
-        return resp.json() if resp and resp.status_code == 200 else []
+        resp = requests.get(url)
+        return resp.json() if resp.status_code == 200 else []
 
     def get_driver_info(session_key):
         url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
-        resp = api_request_with_retry(url)
-        return resp.json() if resp and resp.status_code == 200 else []
+        resp = requests.get(url)
+        return resp.json() if resp.status_code == 200 else []
 
     def get_meeting_info(meeting_key):
         url = f"https://api.openf1.org/v1/meetings?meeting_key={meeting_key}"
-        resp = api_request_with_retry(url)
-        if not resp or resp.status_code != 200:
-            print(f"Error fetching meeting info: {resp.status_code if resp else 'No response'}")
-            return None
-        try:
-            data = resp.json()
-            if isinstance(data, list):
-                return data[0] if data else None
-            elif isinstance(data, dict):
-                return data
-            else:
-                print(f"Unexpected meeting info response: {data}")
-                return None
-        except Exception as e:
-            print(f"Error parsing meeting info: {e}")
+        resp = requests.get(url)
+        data = resp.json()
+        if isinstance(data, list):
+            return data[0] if data else None
+        else:
+            print(f"Unexpected meeting info response: {data}")
             return None
 
     def get_weather(meeting_key, session_key):
         url = f"https://api.openf1.org/v1/weather?meeting_key={meeting_key}&session_key={session_key}"
-        resp = api_request_with_retry(url)
-        if not resp or resp.status_code != 200:
-            return None
+        resp = requests.get(url)
         data = resp.json()
         if not data:
             return None
@@ -103,8 +69,8 @@ def main():
     def get_historical_results():
         # Use all past session_results for driver/team form
         url = "https://api.openf1.org/v1/session_result"
-        resp = api_request_with_retry(url)
-        if not resp or resp.status_code != 200:
+        resp = requests.get(url)
+        if resp.status_code != 200:
             return pd.DataFrame()
         df = pd.DataFrame(resp.json())
         # Only keep valid integer positions
@@ -115,8 +81,8 @@ def main():
     def get_historical_results_with_team():
         # Use all past session_results for driver/team form
         url = "https://api.openf1.org/v1/session_result"
-        resp = api_request_with_retry(url)
-        if not resp or resp.status_code != 200:
+        resp = requests.get(url)
+        if resp.status_code != 200:
             return pd.DataFrame()
         df = pd.DataFrame(resp.json())
         # Only keep valid integer positions
@@ -130,7 +96,6 @@ def main():
                 drivers = get_driver_info(sk)
                 for d in drivers:
                     team_map[(sk, d['driver_number'])] = d.get('team_name', None)
-                time.sleep(0.1)  # Small delay between requests
             except Exception as e:
                 continue
         df['team_name'] = df.apply(lambda row: team_map.get((row['session_key'], row['driver_number']), None), axis=1)
@@ -161,8 +126,7 @@ def main():
     sessions_url = f"{API}/sessions?session_type=Race"
     if YEAR:
         sessions_url += f"&year={YEAR}"
-    sessions_resp = api_request_with_retry(sessions_url)
-    sessions = sessions_resp.json() if sessions_resp and sessions_resp.status_code == 200 else []
+    sessions = requests.get(sessions_url).json()
     if not isinstance(sessions, list):
         print(f"Unexpected sessions response: {sessions}")
         return
@@ -315,53 +279,48 @@ def main():
             API = 'https://api.openf1.org/v1'
             session_key = session['session_key'] if 'session' in locals() and session is not None else None
             if session_key:
-                results_response = api_request_with_retry(f'{API}/session_result?session_key={session_key}')
-                if results_response and results_response.status_code == 200:
-                    results = results_response.json()
-                    if isinstance(results, list) and len(results) > 0:
-                        # Fetch driver info for mapping
-                        driver_info = {}
-                        team_info = {}
-                        try:
-                            drivers_response = api_request_with_retry(f'{API}/drivers?session_key={session_key}')
-                            if drivers_response and drivers_response.status_code == 200:
-                                drivers = drivers_response.json()
-                                if isinstance(drivers, list):
-                                    for d in drivers:
-                                        if isinstance(d, dict):
-                                            driver_info[str(d.get('driver_number', ''))] = d.get('full_name', '')
-                                            team_info[str(d.get('driver_number', ''))] = d.get('team_name', '')
-                        except Exception as e:
-                            print(f"Error fetching drivers: {e}")
-                        
-                        print("\nActual top 5 finishers:")
-                        # Sort by position (handle int and string like 'DQ')
-                        def pos_key(x):
-                            try:
-                                return int(x.get('position', 99))
-                            except (ValueError, TypeError):
-                                return 99
-                        
-                        sorted_results = sorted(results, key=pos_key)[:5]
-                        for idx, row in enumerate(sorted_results, 1):
-                            if isinstance(row, dict):
-                                driver_num = str(row.get('driver_number', ''))
-                                driver = driver_info.get(driver_num, f"#{driver_num}")
-                                team = team_info.get(driver_num, 'Unknown')
-                                grid = row.get('grid_position', 'Unknown')
-                                pos = row.get('position', 'Unknown')
-                                print(f"{idx}. {driver} ({team}) | Grid: {grid} | Position: {pos}")
+                results = requests.get(f'{API}/session_result?session_key={session_key}').json()
+                # Fetch driver info for mapping
+                driver_info = {}
+                team_info = {}
+                try:
+                    drivers = requests.get(f'{API}/drivers?session_key={session_key}').json()
+                    if isinstance(drivers, list):
+                        for d in drivers:
+                            if isinstance(d, dict):
+                                driver_info[str(d.get('driver_number'))] = d.get('full_name', '')
+                                team_info[str(d.get('driver_number'))] = d.get('team_name', '')
+                            else:
+                                print(f"Unexpected driver entry: {d}")
                     else:
-                        print("\nActual results not available - race may not have finished yet.")
+                        print(f"Unexpected drivers response: {drivers}")
+                except Exception as e:
+                    print(f"Error fetching drivers: {e}")
+                if results:
+                    print("\nActual top 5 finishers:")
+                    # Sort by position (handle int and string like 'DQ')
+                    def pos_key(x):
+                        try:
+                            return int(x['position'])
+                        except Exception as e:
+                            print(f"Non-integer position in results: {x.get('position')}, error: {e}")
+                            return 99
+                    for idx, row in enumerate(sorted(results, key=pos_key)[:5], 1):
+                        if not isinstance(row, dict):
+                            print(f"Unexpected result row: {row}")
+                            continue
+                        driver_num = str(row.get('driver_number', ''))
+                        driver = driver_info.get(driver_num, f"#{driver_num}")
+                        team = team_info.get(driver_num, 'Unknown')
+                        grid = row.get('grid_position', 'Unknown')
+                        pos = row.get('position', 'Unknown')
+                        print(f"{idx}. {driver} ({team}) | Grid: {grid} | Position: {pos}")
                 else:
-                    print(f"\nCould not fetch results - API returned status {results_response.status_code}")
-            else:
-                print("\nNo session key available for results lookup.")
+                    print("\nActual results not available for this race.")
         except Exception as e:
             print(f"\nCould not fetch official results: {e}")
     else:
-        print("\nThis race has not happened yet - no actual results available.")
-        print("Predictions are based on historical data and current season form.")
+        print("\nThis race has not happened yet. Only showing prediction based on previous data.")
 
 if __name__ == "__main__":
     main() 
