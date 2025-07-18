@@ -369,6 +369,19 @@ def main():
                 if df_predict is None:
                     print("[ERROR] Aborting prediction due to feature mismatch or preprocessing error.")
                     return
+                # Use the correct feature list for prediction
+                features = [
+                    'grid', 'q1', 'q2', 'q3', 'pit_stop_count', 'avg_lap_time',
+                    'team_name', 'driver_name', 'circuit', 'year',
+                    'driver_form_last3', 'driver_form_last5', 'team_form_last3', 'team_form_last5',
+                    'grid_vs_qual', 'pit_lap_interaction'
+                ]
+                # Only run prediction if DataFrame matches features exactly
+                if list(df_predict.columns) != features:
+                    print("[ERROR] DataFrame columns do not match model features. Aborting prediction.")
+                    print("Expected:", features)
+                    print("Actual:", list(df_predict.columns))
+                    return
                 # Predict with neural net
                 nn_probs = model.predict(df_predict[features]).flatten()
                 # Predict with XGBoost
