@@ -2,6 +2,8 @@ import requests
 import pandas as pd
 import os
 from tqdm import tqdm
+from advanced_features import AdvancedF1Features
+import kagglehub
 
 # Helper to get all race sessions for all years
 START_YEAR = 2018
@@ -67,6 +69,9 @@ def get_weather(meeting_key, session_key):
 
 def main():
     os.makedirs('data', exist_ok=True)
+    # Download latest Kaggle F1 dataset
+    kaggle_path = kagglehub.dataset_download("rohanrao/formula-1-world-championship-1950-2020")
+    print("Path to dataset files:", kaggle_path)
     sessions = get_race_sessions()
     all_rows = []
     for sess in tqdm(sessions, desc="Races"):
@@ -108,6 +113,23 @@ def main():
                 row.update(weather)
             all_rows.append(row)
     df = pd.DataFrame(all_rows)
+    # Filter out rows where finishing_position is not a valid integer (e.g., DQ, DNS, DNF)
+    def is_int_str(x):
+        try:
+            int(x)
+            return True
+        except:
+            return False
+    invalid_rows = ~df['finishing_position'].apply(is_int_str)
+    if invalid_rows.any():
+        print(f"Dropping {invalid_rows.sum()} rows with non-integer finishing_position values: {df.loc[invalid_rows, 'finishing_position'].unique().tolist()}")
+        df = df[~invalid_rows]
+    df['finishing_position'] = df['finishing_position'].astype(int)
+    # Add points column based on finishing position
+    def points_for_position(pos):
+        points_table = {1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1}
+        return points_table.get(pos, 0)
+    df['points'] = df['finishing_position'].apply(points_for_position)
     df = df.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
     # Add driver form: average finish last 3 races (prior to current)
     df = df.sort_values(['driver_number', 'year', 'circuit'])
@@ -190,19 +212,50 @@ def main():
     df['overtaking_difficulty'] = df['circuit'].map(overtaking_map).fillna(3)
     # Weather forecast (if available)
     df['weather_rain_forecast'] = None
-    # Filter out rows where finishing_position is not a valid integer (e.g., DQ, DNS, DNF)
-    def is_int_str(x):
-        try:
-            int(x)
-            return True
-        except:
-            return False
-    invalid_rows = ~df['finishing_position'].apply(is_int_str)
-    if invalid_rows.any():
-        print(f"Dropping {invalid_rows.sum()} rows with non-integer finishing_position values: {df.loc[invalid_rows, 'finishing_position'].unique().tolist()}")
-        df = df[~invalid_rows]
-    df['finishing_position'] = df['finishing_position'].astype(int)
-    df['finishing_position_int'] = df['finishing_position']
+    # After all basic features are created and before saving:
+    aff = AdvancedF1Features()
+    # Ensure 'session_key' is present in df
+    if 'session_key' not in df.columns:
+        if 'year' in df.columns and 'circuit' in df.columns:
+            df['session_key'] = df['year'].astype(str) + '_' + df['circuit'].astype(str)
+        else:
+            df['session_key'] = df.index.astype(str)
+    # Ensure 'session_key' is present in results_history
+    try:
+        results_history = pd.read_csv('data/pre_race_features.csv')
+        if 'session_key' not in results_history.columns:
+            if 'year' in results_history.columns and 'circuit' in results_history.columns:
+                results_history['session_key'] = results_history['year'].astype(str) + '_' + results_history['circuit'].astype(str)
+            else:
+                results_history['session_key'] = results_history.index.astype(str)
+    except Exception:
+        results_history = df.copy()
+    # Ensure 'date' column is present in both df and results_history
+    for dframe in [df, results_history]:
+        if 'date' not in dframe.columns:
+            # Try to create a pseudo-date from year and circuit order
+            if 'year' in dframe.columns and 'circuit' in dframe.columns:
+                # Assign a sequential date per year based on circuit order
+                dframe['date'] = dframe.groupby('year').cumcount() + 1
+                # Optionally, make it a string like '2023_01', '2023_02', ...
+                dframe['date'] = dframe['year'].astype(str) + '_' + dframe['date'].astype(str).str.zfill(2)
+            else:
+                # Fallback: use index as date
+                dframe['date'] = dframe.index.astype(str)
+    # Ensure 'position' column is present in both df and results_history
+    if 'position' not in df.columns and 'finishing_position' in df.columns:
+        df['position'] = df['finishing_position']
+    if 'position' not in results_history.columns and 'finishing_position' in results_history.columns:
+        results_history['position'] = results_history['finishing_position']
+    # Ensure 'points' column is present in both df and results_history
+    def points_for_position(pos):
+        points_table = {1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1}
+        return points_table.get(pos, 0)
+    if 'points' not in df.columns:
+        df['points'] = df['finishing_position'].apply(points_for_position)
+    if 'points' not in results_history.columns and 'finishing_position' in results_history.columns:
+        results_history['points'] = results_history['finishing_position'].apply(points_for_position)
+    df = aff.generate_all_features(df, results_history)
     df.to_csv('data/pre_race_features.csv', index=False)
     print(f"Saved {len(df)} rows to data/pre_race_features.csv")
 
