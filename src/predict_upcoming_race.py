@@ -288,7 +288,14 @@ def main():
                 for col in cat_features:
                     df_predict[col] = df_predict[col].astype(str)
                 # Now safe to encode and scale
-                # ... existing code for encoding, scaling, and prediction ...
+                for col in cat_features:
+                    if col in encoders:
+                        le = encoders[col]
+                        df_predict[col] = df_predict[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
+                        df_predict[col] = le.transform(df_predict[col])
+                    else:
+                        print(f"[WARNING] No encoder found for column '{col}'. Skipping encoding for this column.")
+                # ... existing code for scaling and prediction ...
             else:
                 print(f"[INFO] Using ONLY F1_2025_Dataset for {CIRCUIT} {YEAR} lineup and qualifying.")
                 # Merge race and qualifying data on No, Driver, Team, Track
