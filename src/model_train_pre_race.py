@@ -9,6 +9,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
+import catboost as cb
 
 # Load data
 DATA_PATH = 'data/pre_race_features.csv'
@@ -26,17 +27,38 @@ features = [
 ]
 target = 'finishing_position'
 
-# Fill missing championship/points features with -1 before dropping rows
+# Fill missing championship/points features with -1 before imputation
 for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
     if col in df.columns:
         df[col] = df[col].fillna(-1)
 
-# Now dropna for the rest
-print("Missing values per feature BEFORE dropna:")
+# Print missing values before imputation
+print("Missing values per feature BEFORE imputation:")
 print(df[features + [target]].isnull().sum())
-df = df.dropna(subset=features + [target])
+print(f"Rows before imputation: {len(df)}")
+
+# Impute missing values
+cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
+num_features = [f for f in features if f not in cat_features]
+
+for col in num_features:
+    if col in df.columns:
+        median = df[col].median()
+        df[col] = df[col].fillna(median)
+for col in cat_features:
+    if col in df.columns:
+        mode = df[col].mode()[0]
+        df[col] = df[col].fillna(mode)
+
+# Print missing values after imputation
+print("Missing values per feature AFTER imputation:")
+print(df[features + [target]].isnull().sum())
+print(f"Rows after imputation: {len(df)}")
+
+# Remove dropna (was here):
+# df = df.dropna(subset=features + [target])
 if df.empty:
-    print("No data left after dropping rows with missing values!")
+    print("No data left after imputation!")
     print("Number of missing values per feature:")
     print(df[features + [target]].isnull().sum())
     exit(1)
@@ -97,6 +119,16 @@ print("LightGBM Confusion matrix:\n", confusion_matrix(y_test, lgbm_pred))
 print("LightGBM Classification report:\n", classification_report(y_test, lgbm_pred, target_names=['Not Top 5', 'Top 5']))
 lgbm_model.booster_.save_model('model/lgbm_top5.txt')
 
+# --- CatBoost ---
+cat_model = cb.CatBoostClassifier(verbose=0)
+cat_model.fit(X_train, y_train)
+cat_pred = cat_model.predict(X_test)
+cat_probs = cat_model.predict_proba(X_test)[:,1]
+print("\nCatBoost Test accuracy:", accuracy_score(y_test, cat_pred))
+print("CatBoost Confusion matrix:\n", confusion_matrix(y_test, cat_pred))
+print("CatBoost Classification report:\n", classification_report(y_test, cat_pred, target_names=['Not Top 5', 'Top 5']))
+cat_model.save_model('model/catboost_top5.cbm')
+
 # Build model
 model = keras.Sequential([
     layers.Input(shape=(X.shape[1],)),
@@ -146,3 +178,14 @@ grid_search.fit(X_train, y_train)
 
 xgb_model = grid_search.best_estimator_
 print("Best hyperparameters:", grid_search.best_params_)
+
+# For stacking/blending, save all model outputs
+stacking_df = pd.DataFrame({
+    'xgb': xgb_model.predict_proba(X_test)[:,1],
+    'lgbm': lgbm_model.predict_proba(X_test)[:,1],
+    'cat': cat_probs,
+    'nn': model.predict(X_test).flatten(),
+    'target': y_test.values
+})
+stacking_df.to_csv('model/stacking_outputs.csv', index=False)
+print("\nSaved stacking outputs for meta-model training.")

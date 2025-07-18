@@ -223,7 +223,18 @@ def main():
     circuit_session_keys = [s['session_key'] for s in circuit_sessions]
     # Get all historical results for this circuit (all years)
     hist = get_historical_results_with_team()
+    # Ensure required columns exist in hist and hist_circuit
+    if 'session_key' not in hist.columns:
+        print('[ERROR] session_key column missing from historical results. Cannot proceed with race-specific feature engineering.')
+        return
+    if 'team_name' not in hist.columns:
+        print('[WARNING] team_name column missing from historical results. Filling with None.')
+        hist['team_name'] = None
+    # After filtering, ensure hist_circuit has required columns
     hist_circuit = hist[hist['session_key'].isin(circuit_session_keys)]
+    if 'team_name' not in hist_circuit.columns:
+        print('[WARNING] team_name column missing from circuit-specific historical results. Filling with None.')
+        hist_circuit['team_name'] = None
     # Use the most recent session for driver lineup, but ensure it's for the correct year if possible
     most_recent_session = None
     for s in sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True):
@@ -234,17 +245,32 @@ def main():
         most_recent_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0] if circuit_sessions else session
     # Get drivers for the most recent session for this circuit and year
     drivers = get_driver_info(most_recent_session['session_key'])
+    if not drivers:
+        # Fallback: use the most recent available year for this circuit
+        print(f"[WARNING] No driver lineup found for {circuit} {YEAR}. Using most recent available year for this circuit.")
+        if circuit_sessions:
+            fallback_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
+            drivers = get_driver_info(fallback_session['session_key'])
+        if not drivers:
+            print(f"[ERROR] No driver lineup found for {circuit} in any year. Cannot make prediction.")
+            return
     driver_map = {d['driver_number']: d for d in drivers}
     # Build grid using driver/circuit-specific historical average grid positions
     grid = []
     for d in drivers:
         drv_num = d['driver_number']
         # Use average grid position for this driver at this circuit
-        avg_grid = hist_circuit[hist_circuit['driver_number'] == drv_num]['grid_position'].mean()
+        if 'grid_position' in hist_circuit.columns:
+            avg_grid = hist_circuit[hist_circuit['driver_number'] == drv_num]['grid_position'].mean()
+        else:
+            avg_grid = None
         if pd.isna(avg_grid):
             # Fallback: use average grid position for this driver across all circuits
-            avg_grid = hist[hist['driver_number'] == drv_num]['grid_position'].mean()
-        grid.append({'driver_number': drv_num, 'position': int(avg_grid) if not pd.isna(avg_grid) else 10})
+            if 'grid_position' in hist.columns:
+                avg_grid = hist[hist['driver_number'] == drv_num]['grid_position'].mean()
+            else:
+                avg_grid = None
+        grid.append({'driver_number': drv_num, 'position': int(avg_grid) if not pd.isna(avg_grid) and avg_grid is not None else 10})
     # Use average weather for this circuit (all years)
     url = f"https://api.openf1.org/v1/weather?circuit_short_name={circuit}"
     resp = requests.get(url)
@@ -269,9 +295,15 @@ def main():
         drv_num = entry['driver_number']
         drv = driver_map.get(drv_num, {})
         # Use average qualifying lap time for this driver at this circuit
-        avg_qual_time = hist_circuit[hist_circuit['driver_number'] == drv_num]['qualifying_lap_time'].mean()
+        if 'qualifying_lap_time' in hist_circuit.columns:
+            avg_qual_time = hist_circuit[hist_circuit['driver_number'] == drv_num]['qualifying_lap_time'].mean()
+        else:
+            avg_qual_time = None
         if pd.isna(avg_qual_time):
-            avg_qual_time = hist[hist['driver_number'] == drv_num]['qualifying_lap_time'].mean()
+            if 'qualifying_lap_time' in hist.columns:
+                avg_qual_time = hist[hist['driver_number'] == drv_num]['qualifying_lap_time'].mean()
+            else:
+                avg_qual_time = None
         row = {
             'grid_position': entry['position'],
             'qualifying_lap_time': avg_qual_time,
@@ -286,14 +318,20 @@ def main():
             'country_code': drv.get('country_code', None),
         }
         # Driver form: use all historical results for this driver at this circuit
-        drv_hist = hist_circuit[hist_circuit['driver_number'] == drv_num].sort_values('session_key')
-        if drv_hist.empty:
+        if 'position' in hist_circuit.columns:
+            drv_hist = hist_circuit[hist_circuit['driver_number'] == drv_num].sort_values('session_key')
+        else:
+            drv_hist = pd.DataFrame()
+        if drv_hist.empty and 'position' in hist.columns:
             drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
         row['driver_form_last3'] = drv_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not drv_hist.empty else None
         # Team form: use all historical results for this team at this circuit
         team = drv.get('team_name', None)
-        team_hist = hist_circuit[hist_circuit['team_name'] == team].sort_values('session_key')
-        if team_hist.empty:
+        if 'position' in hist_circuit.columns:
+            team_hist = hist_circuit[hist_circuit['team_name'] == team].sort_values('session_key')
+        else:
+            team_hist = pd.DataFrame()
+        if team_hist.empty and 'position' in hist.columns:
             team_hist = hist[hist['team_name'] == team].sort_values('session_key')
         row['team_form_last3'] = team_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else None
         # Advanced features (fill with None or compute if possible)
@@ -303,12 +341,31 @@ def main():
         row['overtaking_difficulty'] = 3  # default
         rows.append(row)
     df = pd.DataFrame(rows)
+    if df.empty:
+        print("[ERROR] No driver lineup or data available for this race. Cannot make prediction.")
+        return
     # Ensure all required features are present
     for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
         if col not in df.columns:
             df[col] = -1
-    # Now safe to encode categoricals and scale numerics
+    # Ensure all required feature columns exist in df
+    features = [
+        'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
+        'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
+        'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
+        'track_type', 'overtaking_difficulty',
+        'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
+    ]
     cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
+    for col in features:
+        if col not in df.columns:
+            if col in cat_features:
+                print(f"[WARNING] {col} column missing from prediction DataFrame. Filling with 'Unknown'.")
+                df[col] = 'Unknown'
+            else:
+                print(f"[WARNING] {col} column missing from prediction DataFrame. Filling with -1.")
+                df[col] = -1
+    # Now safe to encode categoricals and scale numerics
     for col in cat_features:
         le = encoders[col]
         # Map unseen labels to the first class (acts as 'unknown')
