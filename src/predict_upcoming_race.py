@@ -115,6 +115,85 @@ def get_next_scheduled_race():
     next_session = sorted(future_sessions, key=lambda x: x['date_start'])[0]
     return next_session
 
+# --- Robust encoding and scaling function ---
+def robust_encode_and_scale(df, encoders, scaler, features, cat_features):
+    # Ensure all required columns are present
+    for col in features:
+        if col not in df.columns:
+            if col in cat_features:
+                df[col] = 'Unknown'
+            else:
+                df[col] = -1
+    # Ensure correct dtypes for encoding/scaling
+    for col in cat_features:
+        df[col] = df[col].astype(str)
+    # Encode categoricals
+    for col in cat_features:
+        if col in encoders:
+            le = encoders[col]
+            df[col] = df[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
+            df[col] = le.transform(df[col])
+        else:
+            print(f"[WARNING] No encoder found for column '{col}'. Skipping encoding for this column.")
+    # Scale numerics
+    num_features = [f for f in features if f not in cat_features]
+    df.loc[:, num_features] = scaler.transform(df[num_features])
+    # Fill all NaNs in features with -1
+    df[features] = df[features].fillna(-1)
+    # Ensure all numeric columns are float
+    for col in features:
+        if col not in cat_features:
+            df[col] = df[col].astype(float)
+    return df
+
+# --- Robust preprocessing function for prediction DataFrames ---
+def robust_preprocess_for_prediction(df, encoders, scaler, features, cat_features):
+    # Add missing features
+    missing = [col for col in features if col not in df.columns]
+    for col in missing:
+        if col in cat_features:
+            df[col] = 'Unknown'
+        else:
+            df[col] = -1
+    # Drop extra features
+    extra = [col for col in df.columns if col not in features]
+    if extra:
+        print(f"[WARNING] Dropping extra columns not in model features: {extra}")
+        df = df.drop(columns=extra)
+    # Order columns
+    df = df[features]
+    # Dtype for categoricals
+    for col in cat_features:
+        df[col] = df[col].astype(str)
+    # Encode categoricals
+    for col in cat_features:
+        if col in encoders:
+            le = encoders[col]
+            df[col] = df[col].apply(lambda x: x if x in le.classes_ else le.classes_[0])
+            df[col] = le.transform(df[col])
+        else:
+            print(f"[WARNING] No encoder found for column '{col}'. Skipping encoding for this column.")
+    # Scale numerics
+    num_features = [f for f in features if f not in cat_features]
+    df.loc[:, num_features] = scaler.transform(df[num_features])
+    # Fill NaNs
+    df[features] = df[features].fillna(-1)
+    # Ensure all numeric columns are float
+    for col in num_features:
+        df[col] = df[col].astype(float)
+    # Diagnostics
+    print("[DIAGNOSTIC] Final prediction DataFrame columns:", list(df.columns))
+    print("[DIAGNOSTIC] Dtypes:", df.dtypes.to_dict())
+    print("[DIAGNOSTIC] Any NaNs in features?", df[features].isnull().any().any())
+    print("[DIAGNOSTIC] Columns with NaNs:", df[features].columns[df[features].isnull().any()].tolist())
+    # Check for missing/extra columns
+    if set(df.columns) != set(features):
+        print("[ERROR] Feature mismatch after preprocessing. Aborting prediction.")
+        print("Expected:", features)
+        print("Actual:", list(df.columns))
+        return None
+    return df
+
 # --- Main prediction logic ---
 def main():
     parser = argparse.ArgumentParser()
@@ -278,24 +357,134 @@ def main():
                     'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
                 ]
                 cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
-                for col in required_features:
-                    if col not in df_predict.columns:
-                        if col in cat_features:
-                            df_predict[col] = 'Unknown'
-                        else:
-                            df_predict[col] = -1
-                # Ensure correct dtypes for encoding/scaling
-                for col in cat_features:
-                    df_predict[col] = df_predict[col].astype(str)
-                # Now safe to encode and scale (for local CSV fallback and all paths)
-                for col in cat_features:
-                    if col in encoders:
-                        le = encoders[col]
-                        df_predict[col] = df_predict[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
-                        df_predict[col] = le.transform(df_predict[col])
-                    else:
-                        print(f"[WARNING] No encoder found for column '{col}'. Skipping encoding for this column.")
-                # ... existing code for scaling and prediction ...
+                df_predict = robust_preprocess_for_prediction(df_predict, encoders, scaler, required_features, cat_features)
+                if df_predict is None:
+                    print("[ERROR] Aborting prediction due to feature mismatch or preprocessing error.")
+                    return
+                # Predict with neural net
+                nn_probs = model.predict(df_predict[features]).flatten()
+                # Predict with XGBoost
+                xgb_probs = xgb_model.predict_proba(df_predict[features])[:,1]
+                # Predict with LightGBM
+                import lightgbm as lgb
+                lgbm_model = lgb.Booster(model_file='model/lgbm_top5.txt')
+                lgbm_probs = lgbm_model.predict(df_predict[features])
+                # Predict with CatBoost
+                import catboost as cb
+                cat_model = cb.CatBoostClassifier()
+                cat_model.load_model('model/catboost_top5.cbm')
+                cat_probs = cat_model.predict_proba(df_predict[features])[:,1]
+                # Ensemble: average probabilities
+                ensemble_probs = (nn_probs + xgb_probs + lgbm_probs + cat_probs) / 4
+                # Max-prob (best possibility) ensemble
+                max_probs = np.max(np.vstack([nn_probs, xgb_probs, lgbm_probs, cat_probs]), axis=0)
+                df_predict['top5_probability_nn'] = nn_probs
+                df_predict['top5_probability_xgb'] = xgb_probs
+                df_predict['top5_probability_lgbm'] = lgbm_probs
+                df_predict['top5_probability_cat'] = cat_probs
+                df_predict['top5_probability_ensemble'] = ensemble_probs
+                df_predict['top5_probability_max'] = max_probs
+                # Output top 5 for each
+                out = df_predict.copy()
+                out['driver'] = grid and [driver_map.get(g['driver_number'], {}).get('full_name', g['driver_number']) for g in grid] or None
+                out['team'] = grid and [driver_map.get(g['driver_number'], {}).get('team_name', None) for g in grid] or None
+                out = out[['driver', 'team', 'grid_position', 'top5_probability_nn', 'top5_probability_xgb', 'top5_probability_lgbm', 'top5_probability_cat', 'top5_probability_ensemble', 'top5_probability_max']]
+                # Print combined best possibility (max-prob) top 5
+                out_max = out.sort_values('top5_probability_max', ascending=False).reset_index(drop=True)
+                print("\nTop 5 predicted finishers (Combined Best Possibility - Max Probability):")
+                for idx, row in enumerate(out_max.itertuples(), 1):
+                    medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][idx-1] if idx <= 5 else ""
+                    print(f"{idx}. {medal} {row.driver} ({row.team}) | Grid: {row.grid_position} | Max Top 5 probability: {row.top5_probability_max:.2%}")
+                    if idx == 5:
+                        break
+                print("\nFull top 5 probability table (Combined Best Possibility):")
+                print(out_max.to_string(index=False))
+                # Print ensemble average top 5
+                out_ens = out.sort_values('top5_probability_ensemble', ascending=False).reset_index(drop=True)
+                print("\nTop 5 predicted finishers (Ensemble Average):")
+                for idx, row in enumerate(out_ens.itertuples(), 1):
+                    medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][idx-1] if idx <= 5 else ""
+                    print(f"{idx}. {medal} {row.driver} ({row.team}) | Grid: {row.grid_position} | Ensemble Top 5 probability: {row.top5_probability_ensemble:.2%}")
+                    if idx == 5:
+                        break
+                # Optionally, print top 5s for each model
+                print("\nTop 5 predicted finishers (Neural Net only):")
+                print(out.sort_values('top5_probability_nn', ascending=False).head(5)[['driver','team','grid_position','top5_probability_nn']])
+                print("\nTop 5 predicted finishers (XGBoost only):")
+                print(out.sort_values('top5_probability_xgb', ascending=False).head(5)[['driver','team','grid_position','top5_probability_xgb']])
+                print("\nTop 5 predicted finishers (LightGBM only):")
+                print(out.sort_values('top5_probability_lgbm', ascending=False).head(5)[['driver','team','grid_position','top5_probability_lgbm']])
+                print("\nTop 5 predicted finishers (CatBoost only):")
+                print(out.sort_values('top5_probability_cat', ascending=False).head(5)[['driver','team','grid_position','top5_probability_cat']])
+
+                # After predictions, only fetch and print actual results if the race has already happened
+                race_date = None
+                try:
+                    # Try to get the race date from the session or meeting info
+                    if 'session' in locals() and session is not None and 'date_start' in session:
+                        race_date = session['date_start']
+                    elif 'latest' in locals() and latest is not None and 'date_start' in latest:
+                        race_date = latest['date_start']
+                except Exception:
+                    pass
+
+                show_actual = False
+                if race_date:
+                    try:
+                        race_dt = datetime.fromisoformat(race_date.replace('Z', '+00:00'))
+                        now = datetime.now(timezone.utc)
+                        if race_dt < now:
+                            show_actual = True
+                    except Exception:
+                        pass
+
+                if show_actual:
+                    try:
+                        API = 'https://api.openf1.org/v1'
+                        session_key = session['session_key'] if 'session' in locals() and session is not None else None
+                        if session_key:
+                            results = requests.get(f'{API}/session_result?session_key={session_key}').json()
+                            # Fetch driver info for mapping
+                            driver_info = {}
+                            team_info = {}
+                            try:
+                                drivers = requests.get(f'{API}/drivers?session_key={session_key}').json()
+                                if isinstance(drivers, list):
+                                    for d in drivers:
+                                        if isinstance(d, dict):
+                                            driver_info[str(d.get('driver_number'))] = d.get('full_name', '')
+                                            team_info[str(d.get('driver_number'))] = d.get('team_name', '')
+                                        else:
+                                            print(f"Unexpected driver entry: {d}")
+                                else:
+                                    print(f"Unexpected drivers response: {drivers}")
+                            except Exception as e:
+                                print(f"Error fetching drivers: {e}")
+                            if results:
+                                print("\nActual top 5 finishers:")
+                                # Sort by position (handle int and string like 'DQ')
+                                def pos_key(x):
+                                    try:
+                                        return int(x['position'])
+                                    except Exception as e:
+                                        print(f"Non-integer position in results: {x.get('position')}, error: {e}")
+                                        return 99
+                                for idx, row in enumerate(sorted(results, key=pos_key)[:5], 1):
+                                    if not isinstance(row, dict):
+                                        print(f"Unexpected result row: {row}")
+                                        continue
+                                    driver_num = str(row.get('driver_number', ''))
+                                    driver = driver_info.get(driver_num, f"#{driver_num}")
+                                    team = team_info.get(driver_num, 'Unknown')
+                                    grid = row.get('grid_position', 'Unknown')
+                                    pos = row.get('position', 'Unknown')
+                                    print(f"{idx}. {driver} ({team}) | Grid: {grid} | Position: {pos}")
+                                else:
+                                    print("\nActual results not available for this race.")
+                    except Exception as e:
+                        print(f"\nCould not fetch official results: {e}")
+                else:
+                    print("\nThis race has not happened yet. Only showing prediction based on previous data.")
             else:
                 print(f"[INFO] Using ONLY F1_2025_Dataset for {CIRCUIT} {YEAR} lineup and qualifying.")
                 # Merge race and qualifying data on No, Driver, Team, Track
@@ -495,32 +684,10 @@ def main():
         'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
     ]
     cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
-    for col in features:
-        if col not in df.columns:
-            if col in cat_features:
-                print(f"[WARNING] {col} column missing from prediction DataFrame. Filling with 'Unknown'.")
-                df[col] = 'Unknown'
-            else:
-                print(f"[WARNING] {col} column missing from prediction DataFrame. Filling with -1.")
-                df[col] = -1
-    # Now safe to encode categoricals and scale numerics
-    for col in cat_features:
-        le = encoders[col]
-        # Map unseen labels to the first class (acts as 'unknown')
-        df[col] = df[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
-        df[col] = le.transform(df[col])
-    num_features = [f for f in features if f not in cat_features]
-    df[num_features] = scaler.transform(df[num_features])
-    # Fill missing championship/points features with -1
-    for col in ['driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season']:
-        if col in df.columns:
-            df[col] = df[col].fillna(-1)
-    # Fill all NaNs in features with -1
-    df[features] = df[features].fillna(-1)
-    # Ensure all numeric columns are float
-    for col in features:
-        if col not in cat_features:
-            df[col] = df[col].astype(float)
+    df = robust_preprocess_for_prediction(df, encoders, scaler, features, cat_features)
+    if df is None:
+        print("[ERROR] Aborting prediction due to feature mismatch or preprocessing error.")
+        return
     # Debug: print NaN status and dtypes
     print("Any NaNs in features before prediction?", df[features].isnull().any().any())
     print("Columns with NaNs:", df[features].columns[df[features].isnull().any()].tolist())
