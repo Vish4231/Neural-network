@@ -8,135 +8,125 @@ from datetime import datetime, timezone
 import argparse
 import time
 
-# Remove hardcoded YEAR = 2025
-# Add argument parsing at the top of main()
+# --- Helper functions at top level ---
+def get_driver_info(session_key):
+    url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
+    resp = requests.get(url)
+    return resp.json() if resp.status_code == 200 else []
+
+def get_historical_results():
+    url = "https://api.openf1.org/v1/session_result"
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        return pd.DataFrame()
+    df = pd.DataFrame(resp.json())
+    df = df[df['position'].apply(lambda x: str(x).isdigit())]
+    df['position'] = df['position'].astype(int)
+    return df
+
+def get_historical_results_with_team():
+    url = "https://api.openf1.org/v1/session_result"
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        return pd.DataFrame()
+    df = pd.DataFrame(resp.json())
+    df = df[df['position'].apply(lambda x: str(x).isdigit())]
+    df['position'] = df['position'].astype(int)
+    session_keys = df['session_key'].unique()
+    team_map = {}
+    for sk in session_keys:
+        try:
+            drivers = get_driver_info(sk)
+            for d in drivers:
+                team_map[(sk, d['driver_number'])] = d.get('team_name', None)
+        except Exception as e:
+            continue
+    df['team_name'] = df.apply(lambda row: team_map.get((row['session_key'], row['driver_number']), None), axis=1)
+    missing = df['team_name'].isna().sum()
+    if missing > 0:
+        print(f"Warning: {missing} historical results missing team_name.")
+    return df
+
+def robust_get(url, max_retries=3, sleep_sec=2):
+    for attempt in range(max_retries):
+        resp = requests.get(url)
+        try:
+            data = resp.json()
+        except Exception:
+            data = None
+        if isinstance(data, dict) and 'error' in data and 'rate limit' in data.get('detail', '').lower():
+            print(f"[INFO] Rate limit hit. Sleeping {sleep_sec} seconds and retrying ({attempt+1}/{max_retries})...")
+            time.sleep(sleep_sec)
+            continue
+        return data
+    print(f"[ERROR] Failed to get data from {url} after {max_retries} retries.")
+    return None
+
+def get_latest_race_session():
+    url = "https://api.openf1.org/v1/sessions?session_type=Race"
+    if YEAR is not None:
+        url += f"&year={YEAR}"
+    resp = requests.get(url)
+    sessions = resp.json()
+    if not sessions:
+        raise Exception(f"No race sessions found for year {YEAR}.")
+    latest = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+    return latest
+
+def get_starting_grid(session_key):
+    url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
+    resp = requests.get(url)
+    return resp.json() if resp.status_code == 200 else []
+
+def get_meeting_info(meeting_key):
+    url = f"https://api.openf1.org/v1/meetings?meeting_key={meeting_key}"
+    resp = requests.get(url)
+    data = resp.json()
+    if isinstance(data, list):
+        return data[0] if data else None
+    else:
+        print(f"Unexpected meeting info response: {data}")
+        return None
+
+def get_weather(meeting_key, session_key):
+    url = f"https://api.openf1.org/v1/weather?meeting_key={meeting_key}&session_key={session_key}"
+    resp = requests.get(url)
+    data = resp.json()
+    if not data:
+        return None
+    df = pd.DataFrame(data)
+    return {
+        'air_temperature': df['air_temperature'].mean() if 'air_temperature' in df else None,
+        'humidity': df['humidity'].mean() if 'humidity' in df else None,
+        'rainfall': df['rainfall'].mean() if 'rainfall' in df else None,
+        'track_temperature': df['track_temperature'].mean() if 'track_temperature' in df else None,
+        'wind_speed': df['wind_speed'].mean() if 'wind_speed' in df else None,
+    }
+
+def get_next_scheduled_race():
+    url = "https://api.openf1.org/v1/sessions?session_type=Race"
+    resp = requests.get(url)
+    sessions = resp.json()
+    now = datetime.now(timezone.utc)
+    # Find the next session with a start date in the future
+    future_sessions = [s for s in sessions if 'date_start' in s and datetime.fromisoformat(s['date_start'].replace('Z', '+00:00')) > now]
+    if not future_sessions:
+        raise Exception("No future scheduled races found.")
+    next_session = sorted(future_sessions, key=lambda x: x['date_start'])[0]
+    return next_session
+
+# --- Main prediction logic ---
 def main():
-    parser = argparse.ArgumentParser(description="Predict F1 race results.")
-    parser.add_argument('--year', type=int, default=None, help='Year of the race (e.g., 2024)')
-    parser.add_argument('--circuit', type=str, default=None, help='Circuit short name (e.g., Spa-Francorchamps)')
-    parser.add_argument('--next', action='store_true', help='Predict the next scheduled race (future race)')
-    parser.add_argument('--cutoff_circuit', type=str, default=None, help='Circuit short name to use as data cutoff (e.g., Silverstone)')
-    # Add other arguments as needed
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--year', type=int, help='Year of the race')
+    parser.add_argument('--circuit', type=str, help='Circuit short name')
+    parser.add_argument('--predict_next', action='store_true', help='Predict the next scheduled race')
+    parser.add_argument('--cutoff_circuit', type=str, default=None, help='Circuit to use as cutoff for feature aggregation (optional)')
     args = parser.parse_args()
     YEAR = args.year
     CIRCUIT = args.circuit
-    PREDICT_NEXT = args.next
+    PREDICT_NEXT = args.predict_next
     CUTOFF_CIRCUIT = args.cutoff_circuit
-    # Use YEAR and CIRCUIT in all relevant logic below
-
-    # --- Helper functions (reuse from pre_race_data.py logic) ---
-    def robust_get(url, max_retries=3, sleep_sec=2):
-        for attempt in range(max_retries):
-            resp = requests.get(url)
-            try:
-                data = resp.json()
-            except Exception:
-                data = None
-            if isinstance(data, dict) and 'error' in data and 'rate limit' in data.get('detail', '').lower():
-                print(f"[INFO] Rate limit hit. Sleeping {sleep_sec} seconds and retrying ({attempt+1}/{max_retries})...")
-                time.sleep(sleep_sec)
-                continue
-            return data
-        print(f"[ERROR] Failed to get data from {url} after {max_retries} retries.")
-        return None
-
-    def get_latest_race_session():
-        url = "https://api.openf1.org/v1/sessions?session_type=Race"
-        if YEAR is not None:
-            url += f"&year={YEAR}"
-        resp = requests.get(url)
-        sessions = resp.json()
-        if not sessions:
-            raise Exception(f"No race sessions found for year {YEAR}.")
-        latest = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
-        return latest
-
-    def get_starting_grid(session_key):
-        url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
-        resp = requests.get(url)
-        return resp.json() if resp.status_code == 200 else []
-
-    def get_driver_info(session_key):
-        url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
-        resp = requests.get(url)
-        return resp.json() if resp.status_code == 200 else []
-
-    def get_meeting_info(meeting_key):
-        url = f"https://api.openf1.org/v1/meetings?meeting_key={meeting_key}"
-        resp = requests.get(url)
-        data = resp.json()
-        if isinstance(data, list):
-            return data[0] if data else None
-        else:
-            print(f"Unexpected meeting info response: {data}")
-            return None
-
-    def get_weather(meeting_key, session_key):
-        url = f"https://api.openf1.org/v1/weather?meeting_key={meeting_key}&session_key={session_key}"
-        resp = requests.get(url)
-        data = resp.json()
-        if not data:
-            return None
-        df = pd.DataFrame(data)
-        return {
-            'air_temperature': df['air_temperature'].mean() if 'air_temperature' in df else None,
-            'humidity': df['humidity'].mean() if 'humidity' in df else None,
-            'rainfall': df['rainfall'].mean() if 'rainfall' in df else None,
-            'track_temperature': df['track_temperature'].mean() if 'track_temperature' in df else None,
-            'wind_speed': df['wind_speed'].mean() if 'wind_speed' in df else None,
-        }
-
-    def get_historical_results():
-        # Use all past session_results for driver/team form
-        url = "https://api.openf1.org/v1/session_result"
-        resp = requests.get(url)
-        if resp.status_code != 200:
-            return pd.DataFrame()
-        df = pd.DataFrame(resp.json())
-        # Only keep valid integer positions
-        df = df[df['position'].apply(lambda x: str(x).isdigit())]
-        df['position'] = df['position'].astype(int)
-        return df
-
-    def get_historical_results_with_team():
-        # Use all past session_results for driver/team form
-        url = "https://api.openf1.org/v1/session_result"
-        resp = requests.get(url)
-        if resp.status_code != 200:
-            return pd.DataFrame()
-        df = pd.DataFrame(resp.json())
-        # Only keep valid integer positions
-        df = df[df['position'].apply(lambda x: str(x).isdigit())]
-        df['position'] = df['position'].astype(int)
-        # Add team_name by fetching driver info for each session_key
-        session_keys = df['session_key'].unique()
-        team_map = {}
-        for sk in session_keys:
-            try:
-                drivers = get_driver_info(sk)
-                for d in drivers:
-                    team_map[(sk, d['driver_number'])] = d.get('team_name', None)
-            except Exception as e:
-                continue
-        df['team_name'] = df.apply(lambda row: team_map.get((row['session_key'], row['driver_number']), None), axis=1)
-        missing = df['team_name'].isna().sum()
-        if missing > 0:
-            print(f"Warning: {missing} historical results missing team_name.")
-        return df
-
-    def get_next_scheduled_race():
-        url = "https://api.openf1.org/v1/sessions?session_type=Race"
-        resp = requests.get(url)
-        sessions = resp.json()
-        now = datetime.now(timezone.utc)
-        # Find the next session with a start date in the future
-        future_sessions = [s for s in sessions if 'date_start' in s and datetime.fromisoformat(s['date_start'].replace('Z', '+00:00')) > now]
-        if not future_sessions:
-            raise Exception("No future scheduled races found.")
-        next_session = sorted(future_sessions, key=lambda x: x['date_start'])[0]
-        return next_session
-
-    # --- Main prediction logic ---
     features = [
         'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
         'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
@@ -160,21 +150,21 @@ def main():
         YEAR = session['year']
         CIRCUIT = session.get('circuit_short_name', None)
     else:
-    sessions_url = f"{API}/sessions?session_type=Race"
-    if YEAR:
-        sessions_url += f"&year={YEAR}"
-    sessions = requests.get(sessions_url).json()
-    if not isinstance(sessions, list):
-        print(f"Unexpected sessions response: {sessions}")
-        return
-    session = None
-    if CIRCUIT:
+        sessions_url = f"{API}/sessions?session_type=Race"
+        if YEAR:
+            sessions_url += f"&year={YEAR}"
+        sessions = requests.get(sessions_url).json()
+        if not isinstance(sessions, list):
+            print(f"Unexpected sessions response: {sessions}")
+            return
+        session = None
+        if CIRCUIT:
             # Try to match circuit_short_name (case-insensitive) for the requested year
-        for s in sessions:
+            for s in sessions:
                 if str(s.get('circuit_short_name', '')).lower() == CIRCUIT.lower() and (YEAR is None or s.get('year', None) == YEAR):
-                session = s
-                break
-        if not session:
+                    session = s
+                    break
+            if not session:
                 # If not found, search all years for the requested circuit
                 all_sessions_url = f"{API}/sessions?session_type=Race"
                 all_sessions = requests.get(all_sessions_url).json()
@@ -187,13 +177,13 @@ def main():
                     session['year'] = YEAR
                 else:
                     available = sorted(set(s.get('circuit_short_name','') for s in all_sessions))
-            print(f"Circuit '{CIRCUIT}' not found for year {YEAR}. Available circuits:")
-            for c in available:
-                print(f"  - {c}")
-            return
-    else:
-        # Default to latest session if no circuit specified
-        session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+                    print(f"Circuit '{CIRCUIT}' not found for year {YEAR}. Available circuits:")
+                    for c in available:
+                        print(f"  - {c}")
+                    return
+        else:
+            # Default to latest session if no circuit specified
+            session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
     # Use 'session' for all further logic
     session_key = session['session_key']
     meeting_key = session['meeting_key']
@@ -251,6 +241,95 @@ def main():
         if circuit_sessions:
             fallback_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
             drivers = get_driver_info(fallback_session['session_key'])
+    # For 2025 races, always use the new F1_2025_Dataset for driver lineup, grid, and qualifying
+    if YEAR == 2025 and CIRCUIT:
+        race_path = 'F1_2025_Dataset/F1_2025_RaceResults.csv'
+        qual_path = 'F1_2025_Dataset/F1_2025_QualifyingResults.csv'
+        if os.path.exists(race_path) and os.path.exists(qual_path):
+            df_2025_race = pd.read_csv(race_path)
+            df_2025_qual = pd.read_csv(qual_path)
+            # Try to find the requested circuit
+            circuit_mask = df_2025_race['Track'].str.lower().str.contains(CIRCUIT.lower())
+            if not circuit_mask.any():
+                print(f"[INFO] Circuit '{CIRCUIT}' not found for year 2025. Generating synthetic grid for prediction.")
+                # Use the latest available 2025 driver lineup
+                latest_race = df_2025_race['Track'].iloc[0]
+                lineup = df_2025_race[df_2025_race['Track'] == latest_race][['No','Driver','Team']].copy()
+                # Generate synthetic features
+                n = len(lineup)
+                grid_positions = np.arange(1, n+1)
+                # Use median/NaN for qualifying times
+                q1 = [np.nan]*n
+                q2 = [np.nan]*n
+                q3 = [np.nan]*n
+                df_predict = lineup.copy()
+                df_predict['Track'] = CIRCUIT
+                df_predict['year'] = 2025
+                df_predict['grid_position'] = grid_positions
+                df_predict['Q1'] = q1
+                df_predict['Q2'] = q2
+                df_predict['Q3'] = q3
+                # Add other required columns as NaN or reasonable defaults
+                # ... (add more columns as needed for your model)
+                # Pass df_predict to the model for prediction
+                # ... existing code for prediction ...
+            else:
+                print(f"[INFO] Using ONLY F1_2025_Dataset for {CIRCUIT} {YEAR} lineup and qualifying.")
+                # Merge race and qualifying data on No, Driver, Team, Track
+                merged = pd.merge(df_2025_race, df_2025_qual, on=['Track','No','Driver','Team'], how='left', suffixes=('_race','_qual'))
+                drivers = []
+                grid = []
+                for _, row in merged.iterrows():
+                    try:
+                        grid_pos = int(row['Starting Grid'])
+                    except:
+                        grid_pos = 20  # fallback
+                    drivers.append({
+                        'driver_number': row['No'],
+                        'full_name': row['Driver'],
+                        'team_name': row['Team'],
+                        'country_code': None,
+                        'Q1': row.get('Q1', None),
+                        'Q2': row.get('Q2', None),
+                        'Q3': row.get('Q3', None),
+                    })
+                    grid.append({'driver_number': row['No'], 'position': grid_pos})
+                driver_map = {d['driver_number']: d for d in drivers}
+        else:
+            print(f"[ERROR] F1_2025_Dataset files not found.")
+            return
+    # If not 2025, fall back to API logic as before
+    # If no drivers found for the requested circuit and year, try to load from local CSV
+    if not drivers and CIRCUIT and YEAR == 2025:
+        csv_path = 'data/F1_2025_RaceResults.csv'
+        if os.path.exists(csv_path):
+            df_2025 = pd.read_csv(csv_path)
+            circuit_rows = df_2025[df_2025['Track'].str.lower() == CIRCUIT.lower()]
+            if not circuit_rows.empty:
+                print(f"[INFO] Using local CSV for {CIRCUIT} {YEAR} lineup.")
+                drivers = []
+                grid = []
+                for _, row in circuit_rows.iterrows():
+                    try:
+                        grid_pos = int(row['Starting Grid'])
+                    except:
+                        grid_pos = 20  # fallback
+                    drivers.append({
+                        'driver_number': row['No'],
+                        'full_name': row['Driver'],
+                        'team_name': row['Team'],
+                        'country_code': None,
+                    })
+                    grid.append({'driver_number': row['No'], 'position': grid_pos})
+                driver_map = {d['driver_number']: d for d in drivers}
+            else:
+                print(f"[ERROR] {CIRCUIT} {YEAR} not found in local CSV.")
+        else:
+            print(f"[ERROR] Local CSV {csv_path} not found.")
+    # If still no drivers, abort
+    if not drivers:
+        print(f"[ERROR] No driver lineup found for {circuit} in any year or in local CSV. Cannot make prediction.")
+        return
     # --- Manual fallback for Imola 2025: use user-provided 2025 grid ---
     if (not drivers or len(drivers) == 0) and circuit.lower() in ["imola"] and YEAR == 2025:
         print("[MANUAL FALLBACK] No driver lineup found for Imola 2025. Using user-provided 2025 grid.")
@@ -340,6 +419,9 @@ def main():
         row = {
             'grid_position': entry['position'],
             'qualifying_lap_time': avg_qual_time,
+            'Q1': drv.get('Q1', None),
+            'Q2': drv.get('Q2', None),
+            'Q3': drv.get('Q3', None),
             'air_temperature': weather['air_temperature'] if weather else None,
             'humidity': weather['humidity'] if weather else None,
             'rainfall': weather['rainfall'] if weather else None,
@@ -356,7 +438,7 @@ def main():
         else:
             drv_hist = pd.DataFrame()
         if drv_hist.empty and 'position' in hist.columns:
-        drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
+            drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
         row['driver_form_last3'] = drv_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not drv_hist.empty else None
         # Team form: use all historical results for this team at this circuit
         team = drv.get('team_name', None)
@@ -365,7 +447,7 @@ def main():
         else:
             team_hist = pd.DataFrame()
         if team_hist.empty and 'position' in hist.columns:
-        team_hist = hist[hist['team_name'] == team].sort_values('session_key')
+            team_hist = hist[hist['team_name'] == team].sort_values('session_key')
         row['team_form_last3'] = team_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else None
         # Advanced features (fill with None or compute if possible)
         row['qualifying_gap_to_pole'] = None
@@ -383,7 +465,7 @@ def main():
             df[col] = -1
     # Ensure all required feature columns exist in df
     features = [
-        'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
+        'grid_position', 'qualifying_lap_time', 'Q1', 'Q2', 'Q3', 'air_temperature', 'humidity', 'rainfall',
         'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
         'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
         'track_type', 'overtaking_difficulty',
@@ -500,7 +582,6 @@ def main():
             pass
 
     if show_actual:
-        # Fetch and print actual results as before, but map driver_number to name/team
         try:
             API = 'https://api.openf1.org/v1'
             session_key = session['session_key'] if 'session' in locals() and session is not None else None

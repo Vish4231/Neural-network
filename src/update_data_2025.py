@@ -128,7 +128,7 @@ def fetch_all_years_data():
     
     # Convert to DataFrame
     df = pd.DataFrame(all_data)
-
+    
     # --- INTEGRATE 2025 MANUAL RESULTS CSV ---
     csv_2025_path = os.path.join('data', 'F1_2025_RaceResults.csv')
     if os.path.exists(csv_2025_path):
