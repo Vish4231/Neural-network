@@ -269,10 +269,26 @@ def main():
                 df_predict['Q1'] = q1
                 df_predict['Q2'] = q2
                 df_predict['Q3'] = q3
-                # Add other required columns as NaN or reasonable defaults
-                # ... (add more columns as needed for your model)
-                # Pass df_predict to the model for prediction
-                # ... existing code for prediction ...
+                # Add all required columns for the model/encoders
+                required_features = [
+                    'grid_position', 'qualifying_lap_time', 'Q1', 'Q2', 'Q3', 'air_temperature', 'humidity', 'rainfall',
+                    'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
+                    'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
+                    'track_type', 'overtaking_difficulty',
+                    'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
+                ]
+                cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
+                for col in required_features:
+                    if col not in df_predict.columns:
+                        if col in cat_features:
+                            df_predict[col] = 'Unknown'
+                        else:
+                            df_predict[col] = -1
+                # Ensure correct dtypes for encoding/scaling
+                for col in cat_features:
+                    df_predict[col] = df_predict[col].astype(str)
+                # Now safe to encode and scale
+                # ... existing code for encoding, scaling, and prediction ...
             else:
                 print(f"[INFO] Using ONLY F1_2025_Dataset for {CIRCUIT} {YEAR} lineup and qualifying.")
                 # Merge race and qualifying data on No, Driver, Team, Track
