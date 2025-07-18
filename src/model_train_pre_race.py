@@ -10,6 +10,7 @@ from tensorflow.keras import layers
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
 import catboost as cb
+import joblib
 
 # Load data
 DATA_PATH = 'data/pre_race_features.csv'
@@ -94,6 +95,10 @@ num_features = [f for f in features if f not in cat_features]
 scaler = StandardScaler()
 df[num_features] = scaler.fit_transform(df[num_features])
 
+# Save encoders and scaler
+joblib.dump(encoders, 'model/encoders_top5.pkl')
+joblib.dump(scaler, 'model/scaler_top5.pkl')
+
 # Train/test split
 X = df[features]
 y = df['is_top5']
@@ -159,11 +164,6 @@ for idx, prob in zip(sample.index, sample_pred):
 # Save model
 os.makedirs('model', exist_ok=True)
 model.save('model/pre_race_model_top5.keras')
-
-# Save encoders/scaler for prediction script
-import joblib
-joblib.dump(encoders, 'model/encoders_top5.pkl')
-joblib.dump(scaler, 'model/scaler_top5.pkl')
 
 param_grid = {
     'n_estimators': [100, 200],

@@ -128,6 +128,47 @@ def fetch_all_years_data():
     
     # Convert to DataFrame
     df = pd.DataFrame(all_data)
+
+    # --- INTEGRATE 2025 MANUAL RESULTS CSV ---
+    csv_2025_path = os.path.join('data', 'F1_2025_RaceResults.csv')
+    if os.path.exists(csv_2025_path):
+        print(f"\nIntegrating manual 2025 results from {csv_2025_path}...")
+        df_2025 = pd.read_csv(csv_2025_path)
+        # Harmonize columns
+        df_2025_harmonized = pd.DataFrame({
+            'year': 2025,
+            'circuit': df_2025['Track'],
+            'country': None,  # Not available in CSV
+            'driver_number': df_2025['No'],
+            'grid_position': pd.to_numeric(df_2025['Starting Grid'], errors='coerce'),
+            'qualifying_lap_time': None,  # Not available in CSV
+            'finishing_position': df_2025['Position'].apply(lambda x: int(x) if str(x).isdigit() else None),
+            'team_name': df_2025['Team'],
+            'driver_name': df_2025['Driver'],
+            'country_code': None,  # Not available in CSV
+            'air_temperature': None,
+            'humidity': None,
+            'rainfall': None,
+            'track_temperature': None,
+            'wind_speed': None,
+        })
+        # Remove rows without essential data
+        df_2025_harmonized = df_2025_harmonized.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
+        # Convert finishing_position to int and filter valid positions
+        def is_valid_position(pos):
+            try:
+                int_pos = int(pos)
+                return 1 <= int_pos <= 25
+            except:
+                return False
+        df_2025_harmonized = df_2025_harmonized[df_2025_harmonized['finishing_position'].apply(is_valid_position)]
+        df_2025_harmonized['finishing_position'] = df_2025_harmonized['finishing_position'].astype(int)
+        df_2025_harmonized['finishing_position_int'] = df_2025_harmonized['finishing_position']
+        # Append to main df
+        df = pd.concat([df, df_2025_harmonized], ignore_index=True, sort=False)
+        print(f"Integrated {len(df_2025_harmonized)} 2025 results from CSV.")
+    else:
+        print("No manual 2025 results CSV found.")
     
     # Filter out rows without essential data
     df = df.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
