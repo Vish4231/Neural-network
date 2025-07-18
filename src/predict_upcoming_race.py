@@ -202,96 +202,50 @@ def main():
     country = session.get('country_name', None)
     session_name = session.get('session_name', 'Race')
     print(f"Predicting for: {session_name} | {circuit} | {country} | {year}")
-    # Find all sessions for the specified year, sorted by date
-    year_sessions_url = f"{API}/sessions?session_type=Race&year={YEAR}"
-    year_sessions = requests.get(year_sessions_url).json()
-    if not isinstance(year_sessions, list):
-        print(f"Unexpected sessions response: {year_sessions}")
-        return
-    # Find the specified race in the year
-    target_session = None
-    for s in year_sessions:
-        if str(s.get('circuit_short_name', '')).lower() == circuit.lower():
-            target_session = s
-            break
-    if not target_session:
-        # If not found, fallback to previous logic (simulate future race)
-        all_sessions_url = f"{API}/sessions?session_type=Race"
-        all_sessions = requests.get(all_sessions_url).json()
-        # Ensure all_sessions is a list of dicts
-        if not isinstance(all_sessions, list) or not all_sessions or not isinstance(all_sessions[0], dict):
-            print(f"[ERROR] Unexpected response from sessions API: {all_sessions}")
-            return
-        matching_sessions = [s for s in all_sessions if str(s.get('circuit_short_name', '')).lower() == circuit.lower()]
-        if matching_sessions:
-            target_session = sorted(matching_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
-            print(f"\n[INFO] Circuit '{circuit}' not found for year {YEAR}. Using latest available year {target_session['year']} for driver lineup, but aggregating features from all years up to {YEAR} for simulation of {YEAR}.")
-            target_session['year'] = YEAR
-        else:
-            available = sorted(set(s.get('circuit_short_name','') for s in all_sessions))
-            print(f"Circuit '{circuit}' not found for year {YEAR}. Available circuits:")
-            for c in available:
-                print(f"  - {c}")
-            return
     # Find the cutoff session (by circuit name) in the specified year
     if CUTOFF_CIRCUIT:
         cutoff_session = None
-        for s in year_sessions:
+        for s in sessions: # Use 'sessions' here, not 'year_sessions'
             if str(s.get('circuit_short_name', '')).lower() == CUTOFF_CIRCUIT.lower():
                 cutoff_session = s
                 break
         if not cutoff_session:
             print(f"Cutoff circuit '{CUTOFF_CIRCUIT}' not found for year {YEAR}. Using target race as cutoff.")
-            cutoff_session = target_session
+            cutoff_session = session
     else:
-        cutoff_session = target_session
+        cutoff_session = session
     cutoff_date = cutoff_session['date_start']
-    # Gather all sessions up to and including the cutoff race (all years before, and current year up to cutoff)
+    # --- Improved missing data handling using all years for the circuit ---
+    # Get all sessions for this circuit (all years)
     all_sessions_url = f"{API}/sessions?session_type=Race"
     all_sessions = robust_get(all_sessions_url)
-    # Sessions before the specified year
-    sessions_before = [s for s in all_sessions if s['year'] < YEAR]
-    # Sessions in the specified year up to and including the cutoff race
-    sessions_this_year = [s for s in all_sessions if s['year'] == YEAR and s['date_start'] <= cutoff_date]
-    used_sessions = sessions_before + sessions_this_year
-    used_session_keys = [s['session_key'] for s in used_sessions if 'session_key' in s]
-    # Get all historical results up to and including the specified race
+    circuit_sessions = [s for s in all_sessions if str(s.get('circuit_short_name', '')).lower() == circuit.lower()]
+    circuit_session_keys = [s['session_key'] for s in circuit_sessions]
+    # Get all historical results for this circuit (all years)
     hist = get_historical_results_with_team()
-    hist = hist[hist['session_key'].isin(used_session_keys)]
-    # Use the driver lineup from the cutoff session in the specified year if available
-    driver_lineup_session = None
-    # Try to find the session for the cutoff circuit in the specified year
-    for s in year_sessions:
-        if str(s.get('circuit_short_name', '')).lower() == (CUTOFF_CIRCUIT or circuit).lower():
-            driver_lineup_session = s
+    hist_circuit = hist[hist['session_key'].isin(circuit_session_keys)]
+    # Use the most recent session for driver lineup, but ensure it's for the correct year if possible
+    most_recent_session = None
+    for s in sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True):
+        if s['year'] == YEAR:
+            most_recent_session = s
             break
-    if not driver_lineup_session:
-        print(f"[WARNING] No session found for {CUTOFF_CIRCUIT or circuit} {YEAR}. Trying to use target session.")
-        driver_lineup_session = target_session
-    drivers = robust_get(f"https://api.openf1.org/v1/drivers?session_key={driver_lineup_session['session_key']}")
-    if not drivers:
-        # Fallback: use the most recent available year for this circuit
-        all_sessions_url = f"{API}/sessions?session_type=Race"
-        all_sessions = robust_get(all_sessions_url)
-        if not isinstance(all_sessions, list) or not all_sessions or not isinstance(all_sessions[0], dict):
-            print(f"[ERROR] Unexpected response from sessions API: {all_sessions}")
-            return
-        matching_sessions = [s for s in all_sessions if isinstance(s, dict) and str(s.get('circuit_short_name', '')).lower() == circuit.lower()]
-        if matching_sessions:
-            fallback_session = sorted(matching_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
-            print(f"[WARNING] No driver lineup found for {circuit} {YEAR} (cutoff: {CUTOFF_CIRCUIT or circuit}). The OpenF1 API does not have {YEAR} entry data yet. Using latest available year {fallback_session['year']} for driver lineup as a fallback.")
-            drivers = robust_get(f"https://api.openf1.org/v1/drivers?session_key={fallback_session['session_key']}")
-        else:
-            print(f"[ERROR] No driver lineup found for {circuit} in any year.")
-            return
+    if not most_recent_session:
+        most_recent_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0] if circuit_sessions else session
+    # Get drivers for the most recent session for this circuit and year
+    drivers = get_driver_info(most_recent_session['session_key'])
     driver_map = {d['driver_number']: d for d in drivers}
-    # Build grid using average grid positions up to and including the specified race
+    # Build grid using driver/circuit-specific historical average grid positions
     grid = []
     for d in drivers:
         drv_num = d['driver_number']
-        avg_grid = hist[hist['driver_number'] == drv_num]['grid_position'].mean() if 'grid_position' in hist.columns else None
-        grid.append({'driver_number': drv_num, 'position': int(avg_grid) if avg_grid is not None else 10})
-    # Use average weather for this circuit up to and including the specified race
+        # Use average grid position for this driver at this circuit
+        avg_grid = hist_circuit[hist_circuit['driver_number'] == drv_num]['grid_position'].mean()
+        if pd.isna(avg_grid):
+            # Fallback: use average grid position for this driver across all circuits
+            avg_grid = hist[hist['driver_number'] == drv_num]['grid_position'].mean()
+        grid.append({'driver_number': drv_num, 'position': int(avg_grid) if not pd.isna(avg_grid) else 10})
+    # Use average weather for this circuit (all years)
     url = f"https://api.openf1.org/v1/weather?circuit_short_name={circuit}"
     resp = requests.get(url)
     data = resp.json() if resp.status_code == 200 else []
@@ -309,20 +263,18 @@ def main():
         }
     else:
         weather = {'air_temperature': 22, 'humidity': 60, 'rainfall': 0, 'track_temperature': 30, 'wind_speed': 5}
-    # For each driver, use average qualifying lap time up to and including the specified race
+    # For each driver, use circuit- and driver-specific historical averages for qualifying lap time and form
     rows = []
     for entry in grid:
         drv_num = entry['driver_number']
         drv = driver_map.get(drv_num, {})
-        avg_qual_time = None
-        if 'qualifying_lap_time' in hist.columns:
-            q_times = hist[hist['driver_number'] == drv_num]['qualifying_lap_time']
-            q_times = q_times[pd.notnull(q_times)]
-            if not q_times.empty:
-                avg_qual_time = q_times.mean()
+        # Use average qualifying lap time for this driver at this circuit
+        avg_qual_time = hist_circuit[hist_circuit['driver_number'] == drv_num]['qualifying_lap_time'].mean()
+        if pd.isna(avg_qual_time):
+            avg_qual_time = hist[hist['driver_number'] == drv_num]['qualifying_lap_time'].mean()
         row = {
             'grid_position': entry['position'],
-            'qualifying_lap_time': entry.get('lap_duration', avg_qual_time),
+            'qualifying_lap_time': avg_qual_time,
             'air_temperature': weather['air_temperature'] if weather else None,
             'humidity': weather['humidity'] if weather else None,
             'rainfall': weather['rainfall'] if weather else None,
@@ -333,12 +285,16 @@ def main():
             'circuit': circuit,
             'country_code': drv.get('country_code', None),
         }
-        # Driver form: use all historical results for this driver up to and including the specified race
-        drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
+        # Driver form: use all historical results for this driver at this circuit
+        drv_hist = hist_circuit[hist_circuit['driver_number'] == drv_num].sort_values('session_key')
+        if drv_hist.empty:
+            drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
         row['driver_form_last3'] = drv_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not drv_hist.empty else None
-        # Team form: use all historical results for this team up to and including the specified race
+        # Team form: use all historical results for this team at this circuit
         team = drv.get('team_name', None)
-        team_hist = hist[hist['team_name'] == team].sort_values('session_key')
+        team_hist = hist_circuit[hist_circuit['team_name'] == team].sort_values('session_key')
+        if team_hist.empty:
+            team_hist = hist[hist['team_name'] == team].sort_values('session_key')
         row['team_form_last3'] = team_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else None
         # Advanced features (fill with None or compute if possible)
         row['qualifying_gap_to_pole'] = None
