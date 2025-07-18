@@ -251,9 +251,42 @@ def main():
         if circuit_sessions:
             fallback_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
             drivers = get_driver_info(fallback_session['session_key'])
-        if not drivers:
-            print(f"[ERROR] No driver lineup found for {circuit} in any year. Cannot make prediction.")
-            return
+    # --- Manual fallback for Spa: use Silverstone lineup from the same year if still not found ---
+    if (not drivers or len(drivers) == 0) and circuit.lower() in ["spa", "spa-francorchamps"] and YEAR == 2025:
+        print("[MANUAL FALLBACK] No driver lineup found for Spa 2025. Using user-provided manual lineup.")
+        manual_lineup = [
+            {"country": "United Kingdom", "driver_name": "L. Norris", "team_name": "McLaren", "driver_number": 4},
+            {"country": "Australia", "driver_name": "O. Piastri", "team_name": "McLaren", "driver_number": 81},
+            {"country": "Germany", "driver_name": "N. Hülkenberg", "team_name": "Kick Sauber", "driver_number": 27},
+            {"country": "United Kingdom", "driver_name": "L. Hamilton", "team_name": "Ferrari", "driver_number": 44},
+            {"country": "Netherlands", "driver_name": "M. Verstappen", "team_name": "Red Bull", "driver_number": 1},
+            {"country": "France", "driver_name": "P. Gasly", "team_name": "Alpine", "driver_number": 10},
+            {"country": "Canada", "driver_name": "L. Stroll", "team_name": "Aston Martin", "driver_number": 18},
+            {"country": "Thailand", "driver_name": "A. Albon", "team_name": "Williams", "driver_number": 23},
+            {"country": "Spain", "driver_name": "F. Alonso", "team_name": "Aston Martin", "driver_number": 14},
+            {"country": "United Kingdom", "driver_name": "G. Russell", "team_name": "Mercedes", "driver_number": 63},
+            {"country": "United Kingdom", "driver_name": "O. Bearman", "team_name": "Haas", "driver_number": 87},
+            {"country": "Spain", "driver_name": "C. Sainz Jr.", "team_name": "Williams", "driver_number": 55},
+            {"country": "France", "driver_name": "E. Ocon", "team_name": "Haas", "driver_number": 31},
+            {"country": "Monaco", "driver_name": "C. Leclerc", "team_name": "Ferrari", "driver_number": 16},
+            {"country": "Japan", "driver_name": "Y. Tsunoda", "team_name": "Red Bull", "driver_number": 22},
+            {"country": "Italy", "driver_name": "A.K. Antonelli", "team_name": "Mercedes", "driver_number": 12},
+            {"country": "France", "driver_name": "I. Hadjar", "team_name": "RB", "driver_number": 6},
+            {"country": "Brazil", "driver_name": "G. Bortoleto", "team_name": "Kick Sauber", "driver_number": 5},
+            {"country": "New Zealand", "driver_name": "L. Lawson", "team_name": "RB", "driver_number": 30},
+            {"country": "Argentina", "driver_name": "F. Colapinto", "team_name": "Alpine", "driver_number": 43},
+        ]
+        drivers = []
+        for entry in manual_lineup:
+            drivers.append({
+                'driver_number': entry['driver_number'],
+                'full_name': entry['driver_name'],
+                'team_name': entry['team_name'],
+                'country_code': entry['country'],
+            })
+    if not drivers:
+        print(f"[ERROR] No driver lineup found for {circuit} in any year. Cannot make prediction.")
+        return
     driver_map = {d['driver_number']: d for d in drivers}
     # Build grid using driver/circuit-specific historical average grid positions
     grid = []
