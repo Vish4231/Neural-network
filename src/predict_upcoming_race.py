@@ -334,30 +334,38 @@ def main():
                 # Use the latest available 2025 driver lineup
                 latest_race = df_2025_race['Track'].iloc[0]
                 lineup = df_2025_race[df_2025_race['Track'] == latest_race][['No','Driver','Team']].copy()
-                # Generate synthetic features
-                n = len(lineup)
-                grid_positions = np.arange(1, n+1)
-                # Use median/NaN for qualifying times
-                q1 = [np.nan]*n
-                q2 = [np.nan]*n
-                q3 = [np.nan]*n
-                df_predict = lineup.copy()
-                df_predict['Track'] = CIRCUIT
-                df_predict['year'] = 2025
-                df_predict['grid_position'] = grid_positions
-                df_predict['Q1'] = q1
-                df_predict['Q2'] = q2
-                df_predict['Q3'] = q3
-                # Add all required columns for the model/encoders
-                required_features = [
-                    'grid_position', 'qualifying_lap_time', 'Q1', 'Q2', 'Q3', 'air_temperature', 'humidity', 'rainfall',
-                    'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
-                    'driver_form_last3', 'team_form_last3', 'qualifying_gap_to_pole', 'teammate_grid_delta',
-                    'track_type', 'overtaking_difficulty',
-                    'driver_championship_position', 'team_championship_position', 'driver_points_season', 'team_points_season'
+                # Build the exact feature set for the model
+                feature_list = [
+                    'grid', 'q1', 'q2', 'q3', 'pit_stop_count', 'avg_lap_time',
+                    'team_name', 'driver_name', 'circuit', 'year',
+                    'driver_form_last3', 'driver_form_last5', 'team_form_last3', 'team_form_last5',
+                    'grid_vs_qual', 'pit_lap_interaction'
                 ]
-                cat_features = ['team_name', 'driver_name', 'circuit', 'country_code', 'track_type']
-                df_predict = robust_preprocess_for_prediction(df_predict, encoders, scaler, required_features, cat_features)
+                cat_features = ['team_name', 'driver_name', 'circuit']
+                # Build synthetic DataFrame with these columns
+                n = len(lineup)
+                df_predict = pd.DataFrame({
+                    'grid': np.arange(1, n+1),
+                    'q1': [-1]*n,
+                    'q2': [-1]*n,
+                    'q3': [-1]*n,
+                    'pit_stop_count': [-1]*n,
+                    'avg_lap_time': [-1]*n,
+                    'team_name': lineup['Team'] if 'Team' in lineup else ['Unknown']*n,
+                    'driver_name': lineup['Driver'] if 'Driver' in lineup else ['Unknown']*n,
+                    'circuit': [CIRCUIT]*n,
+                    'year': [2025]*n,
+                    'driver_form_last3': [-1]*n,
+                    'driver_form_last5': [-1]*n,
+                    'team_form_last3': [-1]*n,
+                    'team_form_last5': [-1]*n,
+                    'grid_vs_qual': [-1]*n,
+                    'pit_lap_interaction': [-1]*n
+                })
+                # Drop any extra columns
+                df_predict = df_predict[feature_list]
+                # Preprocess and check
+                df_predict = robust_preprocess_for_prediction(df_predict, encoders, scaler, feature_list, cat_features)
                 if df_predict is None:
                     print("[ERROR] Aborting prediction due to feature mismatch or preprocessing error.")
                     return
