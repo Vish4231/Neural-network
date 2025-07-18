@@ -69,9 +69,70 @@ def get_weather(meeting_key, session_key):
 
 def main():
     os.makedirs('data', exist_ok=True)
-    # Download latest Kaggle F1 dataset
-    kaggle_path = kagglehub.dataset_download("rohanrao/formula-1-world-championship-1950-2020")
-    print("Path to dataset files:", kaggle_path)
+    # Kaggle dataset integration
+    kaggle_dir = os.path.join('data', 'kaggle_f1')
+    if not os.path.exists(kaggle_dir):
+        print('Kaggle F1 dataset not found, downloading...')
+        kaggle_path = kagglehub.dataset_download("rohanrao/formula-1-world-championship-1950-2020", path=kaggle_dir)
+        print("Downloaded Kaggle dataset to:", kaggle_path)
+    else:
+        print('Kaggle F1 dataset already present at:', kaggle_dir)
+    # List main CSVs for integration
+    kaggle_csvs = ['results.csv', 'races.csv', 'drivers.csv', 'constructors.csv', 'circuits.csv']
+    for csv in kaggle_csvs:
+        csv_path = os.path.join(kaggle_dir, csv)
+        if not os.path.exists(csv_path):
+            print(f"[WARNING] {csv} not found in Kaggle dataset directory: {kaggle_dir}")
+        else:
+            print(f"Found {csv_path}")
+    # Parse Kaggle F1 data and harmonize columns
+    import pandas as pd
+    kaggle_results = os.path.join(kaggle_dir, 'results.csv')
+    kaggle_races = os.path.join(kaggle_dir, 'races.csv')
+    kaggle_drivers = os.path.join(kaggle_dir, 'drivers.csv')
+    kaggle_teams = os.path.join(kaggle_dir, 'constructors.csv')
+    kaggle_circuits = os.path.join(kaggle_dir, 'circuits.csv')
+    if all(os.path.exists(p) for p in [kaggle_results, kaggle_races, kaggle_drivers, kaggle_teams, kaggle_circuits]):
+        print('Parsing Kaggle F1 data...')
+        df_results = pd.read_csv(kaggle_results)
+        df_races = pd.read_csv(kaggle_races)
+        df_drivers = pd.read_csv(kaggle_drivers)
+        df_teams = pd.read_csv(kaggle_teams)
+        df_circuits = pd.read_csv(kaggle_circuits)
+        # Merge results with races to get year, circuit, country
+        df_merged = df_results.merge(df_races, left_on='raceId', right_on='raceId', suffixes=('', '_race'))
+        df_merged = df_merged.merge(df_circuits, left_on='circuitId', right_on='circuitId', suffixes=('', '_circuit'))
+        df_merged = df_merged.merge(df_drivers, left_on='driverId', right_on='driverId', suffixes=('', '_driver'))
+        df_merged = df_merged.merge(df_teams, left_on='constructorId', right_on='constructorId', suffixes=('', '_team'))
+        # Harmonize columns
+        kaggle_df = pd.DataFrame({
+            'year': df_merged['year'],
+            'circuit': df_merged['name_circuit'],
+            'country': df_merged['location'],
+            'driver_number': df_merged['number'],
+            'grid_position': df_merged['grid'],
+            'qualifying_lap_time': None,  # Not available in Kaggle, can be filled later
+            'finishing_position': df_merged['positionOrder'],
+            'team_name': df_merged['name_team'],
+            'driver_name': df_merged['surname'],
+            'country_code': df_merged['nationality_driver'],
+            'points': df_merged['points']
+        })
+        # Remove rows with missing essential data
+        kaggle_df = kaggle_df.dropna(subset=['year', 'circuit', 'driver_number', 'finishing_position', 'team_name', 'driver_name'])
+        # Convert types
+        kaggle_df['year'] = kaggle_df['year'].astype(int)
+        kaggle_df['finishing_position'] = kaggle_df['finishing_position'].astype(int)
+        kaggle_df['grid_position'] = pd.to_numeric(kaggle_df['grid_position'], errors='coerce').fillna(-1).astype(int)
+        kaggle_df['points'] = pd.to_numeric(kaggle_df['points'], errors='coerce').fillna(0).astype(float)
+        print(f"Kaggle F1 data shape: {kaggle_df.shape}")
+        # Now, continue with OpenF1 data as before and concatenate
+        # ... existing OpenF1 data pipeline ...
+        # At the end, concatenate kaggle_df and df for unified feature engineering
+        df = pd.concat([df, kaggle_df], ignore_index=True, sort=False)
+        print(f"Unified F1 dataset shape (OpenF1 + Kaggle): {df.shape}")
+    else:
+        print("[WARNING] Kaggle F1 dataset not fully available, skipping integration.")
     sessions = get_race_sessions()
     all_rows = []
     for sess in tqdm(sessions, desc="Races"):

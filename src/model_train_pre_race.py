@@ -13,6 +13,8 @@ from sklearn.model_selection import GridSearchCV
 # Load data
 DATA_PATH = 'data/pre_race_features.csv'
 df = pd.read_csv(DATA_PATH)
+# Filter for modern F1 era (2010+)
+df = df[df['year'] >= 2010]
 
 # Drop rows with missing target or grid position
 features = [
