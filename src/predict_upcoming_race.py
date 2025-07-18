@@ -4,92 +4,142 @@ import numpy as np
 import os
 import joblib
 from tensorflow import keras
+from datetime import datetime, timezone
+import argparse
+import time
+from typing import Optional
 
-YEAR = 2025  # Set to None for latest, or specify a year (e.g., 2025)
-
-# --- Helper functions (reuse from pre_race_data.py logic) ---
-def get_latest_race_session():
-    url = "https://api.openf1.org/v1/sessions?session_type=Race"
-    if YEAR is not None:
-        url += f"&year={YEAR}"
-    resp = requests.get(url)
-    sessions = resp.json()
-    if not sessions:
-        raise Exception(f"No race sessions found for year {YEAR}.")
-    latest = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
-    return latest
-
-def get_starting_grid(session_key):
-    url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
-    resp = requests.get(url)
-    return resp.json() if resp.status_code == 200 else []
-
-def get_driver_info(session_key):
-    url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
-    resp = requests.get(url)
-    return resp.json() if resp.status_code == 200 else []
-
-def get_meeting_info(meeting_key):
-    url = f"https://api.openf1.org/v1/meetings?meeting_key={meeting_key}"
-    resp = requests.get(url)
-    data = resp.json()
-    return data[0] if data else None
-
-def get_weather(meeting_key, session_key):
-    url = f"https://api.openf1.org/v1/weather?meeting_key={meeting_key}&session_key={session_key}"
-    resp = requests.get(url)
-    data = resp.json()
-    if not data:
-        return None
-    df = pd.DataFrame(data)
-    return {
-        'air_temperature': df['air_temperature'].mean() if 'air_temperature' in df else None,
-        'humidity': df['humidity'].mean() if 'humidity' in df else None,
-        'rainfall': df['rainfall'].mean() if 'rainfall' in df else None,
-        'track_temperature': df['track_temperature'].mean() if 'track_temperature' in df else None,
-        'wind_speed': df['wind_speed'].mean() if 'wind_speed' in df else None,
-    }
-
-def get_historical_results():
-    # Use all past session_results for driver/team form
-    url = "https://api.openf1.org/v1/session_result"
-    resp = requests.get(url)
-    if resp.status_code != 200:
-        return pd.DataFrame()
-    df = pd.DataFrame(resp.json())
-    # Only keep valid integer positions
-    df = df[df['position'].apply(lambda x: str(x).isdigit())]
-    df['position'] = df['position'].astype(int)
-    return df
-
-def get_historical_results_with_team():
-    # Use all past session_results for driver/team form
-    url = "https://api.openf1.org/v1/session_result"
-    resp = requests.get(url)
-    if resp.status_code != 200:
-        return pd.DataFrame()
-    df = pd.DataFrame(resp.json())
-    # Only keep valid integer positions
-    df = df[df['position'].apply(lambda x: str(x).isdigit())]
-    df['position'] = df['position'].astype(int)
-    # Add team_name by fetching driver info for each session_key
-    session_keys = df['session_key'].unique()
-    team_map = {}
-    for sk in session_keys:
+# Rate limiting wrapper
+def api_request_with_retry(url: str, max_retries: int = 3, delay: float = 1.0) -> Optional[requests.Response]:
+    """Make API request with retry logic for rate limiting"""
+    for attempt in range(max_retries):
         try:
-            drivers = get_driver_info(sk)
-            for d in drivers:
-                team_map[(sk, d['driver_number'])] = d.get('team_name', None)
-        except Exception as e:
-            continue
-    df['team_name'] = df.apply(lambda row: team_map.get((row['session_key'], row['driver_number']), None), axis=1)
-    missing = df['team_name'].isna().sum()
-    if missing > 0:
-        print(f"Warning: {missing} historical results missing team_name.")
-    return df
+            response = requests.get(url)
+            if response.status_code == 200:
+                return response
+            elif response.status_code == 429:  # Rate limited
+                wait_time = delay * (2 ** attempt)  # Exponential backoff
+                print(f"Rate limited (429), waiting {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"API error: {response.status_code} - {response.text[:100]}")
+                return response
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+    return None
 
-# --- Main prediction logic ---
+# Remove hardcoded YEAR = 2025
+# Add argument parsing at the top of main()
 def main():
+    parser = argparse.ArgumentParser(description="Predict F1 race results.")
+    parser.add_argument('--year', type=int, default=None, help='Year of the race (e.g., 2024)')
+    parser.add_argument('--circuit', type=str, default=None, help='Circuit short name (e.g., Spa-Francorchamps)')
+    # Add other arguments as needed
+    args = parser.parse_args()
+    YEAR = args.year
+    CIRCUIT = args.circuit
+    # Use YEAR and CIRCUIT in all relevant logic below
+
+    # --- Helper functions (reuse from pre_race_data.py logic) ---
+    def get_latest_race_session():
+        url = "https://api.openf1.org/v1/sessions?session_type=Race"
+        if YEAR is not None:
+            url += f"&year={YEAR}"
+        resp = requests.get(url)
+        sessions = resp.json()
+        if not sessions:
+            raise Exception(f"No race sessions found for year {YEAR}.")
+        latest = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+        return latest
+
+    def get_starting_grid(session_key):
+        url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
+        resp = api_request_with_retry(url)
+        return resp.json() if resp and resp.status_code == 200 else []
+
+    def get_driver_info(session_key):
+        url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
+        resp = api_request_with_retry(url)
+        return resp.json() if resp and resp.status_code == 200 else []
+
+    def get_meeting_info(meeting_key):
+        url = f"https://api.openf1.org/v1/meetings?meeting_key={meeting_key}"
+        resp = api_request_with_retry(url)
+        if not resp or resp.status_code != 200:
+            print(f"Error fetching meeting info: {resp.status_code if resp else 'No response'}")
+            return None
+        try:
+            data = resp.json()
+            if isinstance(data, list):
+                return data[0] if data else None
+            elif isinstance(data, dict):
+                return data
+            else:
+                print(f"Unexpected meeting info response: {data}")
+                return None
+        except Exception as e:
+            print(f"Error parsing meeting info: {e}")
+            return None
+
+    def get_weather(meeting_key, session_key):
+        url = f"https://api.openf1.org/v1/weather?meeting_key={meeting_key}&session_key={session_key}"
+        resp = api_request_with_retry(url)
+        if not resp or resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not data:
+            return None
+        df = pd.DataFrame(data)
+        return {
+            'air_temperature': df['air_temperature'].mean() if 'air_temperature' in df else None,
+            'humidity': df['humidity'].mean() if 'humidity' in df else None,
+            'rainfall': df['rainfall'].mean() if 'rainfall' in df else None,
+            'track_temperature': df['track_temperature'].mean() if 'track_temperature' in df else None,
+            'wind_speed': df['wind_speed'].mean() if 'wind_speed' in df else None,
+        }
+
+    def get_historical_results():
+        # Use all past session_results for driver/team form
+        url = "https://api.openf1.org/v1/session_result"
+        resp = api_request_with_retry(url)
+        if not resp or resp.status_code != 200:
+            return pd.DataFrame()
+        df = pd.DataFrame(resp.json())
+        # Only keep valid integer positions
+        df = df[df['position'].apply(lambda x: str(x).isdigit())]
+        df['position'] = df['position'].astype(int)
+        return df
+
+    def get_historical_results_with_team():
+        # Use all past session_results for driver/team form
+        url = "https://api.openf1.org/v1/session_result"
+        resp = api_request_with_retry(url)
+        if not resp or resp.status_code != 200:
+            return pd.DataFrame()
+        df = pd.DataFrame(resp.json())
+        # Only keep valid integer positions
+        df = df[df['position'].apply(lambda x: str(x).isdigit())]
+        df['position'] = df['position'].astype(int)
+        # Add team_name by fetching driver info for each session_key
+        session_keys = df['session_key'].unique()
+        team_map = {}
+        for sk in session_keys:
+            try:
+                drivers = get_driver_info(sk)
+                for d in drivers:
+                    team_map[(sk, d['driver_number'])] = d.get('team_name', None)
+                time.sleep(0.1)  # Small delay between requests
+            except Exception as e:
+                continue
+        df['team_name'] = df.apply(lambda row: team_map.get((row['session_key'], row['driver_number']), None), axis=1)
+        missing = df['team_name'].isna().sum()
+        if missing > 0:
+            print(f"Warning: {missing} historical results missing team_name.")
+        return df
+
+    # --- Main prediction logic ---
     features = [
         'grid_position', 'qualifying_lap_time', 'air_temperature', 'humidity', 'rainfall',
         'track_temperature', 'wind_speed', 'team_name', 'driver_name', 'circuit', 'country_code',
@@ -106,8 +156,34 @@ def main():
     import xgboost as xgb
     xgb_model = xgb.XGBClassifier()
     xgb_model.load_model('model/xgb_top5.model')
-    # --- Fetch latest race data ---
-    session = get_latest_race_session()
+    # --- Fetch sessions for the given year and filter by circuit ---
+    API = 'https://api.openf1.org/v1'
+    sessions_url = f"{API}/sessions?session_type=Race"
+    if YEAR:
+        sessions_url += f"&year={YEAR}"
+    sessions_resp = api_request_with_retry(sessions_url)
+    sessions = sessions_resp.json() if sessions_resp and sessions_resp.status_code == 200 else []
+    if not isinstance(sessions, list):
+        print(f"Unexpected sessions response: {sessions}")
+        return
+    # Filter by circuit if specified
+    session = None
+    if CIRCUIT:
+        # Try to match circuit_short_name (case-insensitive)
+        for s in sessions:
+            if str(s.get('circuit_short_name', '')).lower() == CIRCUIT.lower():
+                session = s
+                break
+        if not session:
+            available = sorted(set(s.get('circuit_short_name','') for s in sessions))
+            print(f"Circuit '{CIRCUIT}' not found for year {YEAR}. Available circuits:")
+            for c in available:
+                print(f"  - {c}")
+            return
+    else:
+        # Default to latest session if no circuit specified
+        session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+    # Use 'session' for all further logic
     session_key = session['session_key']
     meeting_key = session['meeting_key']
     year = session['year']
@@ -201,9 +277,9 @@ def main():
     out = out[['driver', 'team', 'grid_position', 'top5_probability_nn', 'top5_probability_xgb', 'top5_probability_ensemble']]
     out = out.sort_values('top5_probability_ensemble', ascending=False).reset_index(drop=True)
     print("\nTop 5 predicted finishers (Ensemble):")
-    for i, row in out.head(5).iterrows():
-        medal = ['🥇','🥈','🥉','🏅','🏅'][i] if i < 5 else ''
-        print(f"{medal} {row['driver']} ({row['team']}) | Grid: {row['grid_position']} | Ensemble Top 5 probability: {row['top5_probability_ensemble']*100:.2f}%")
+    for idx, row in enumerate(out.itertuples(), 1):
+        medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][idx-1] if idx <= 5 else ""
+        print(f"{idx}. {medal} {row.driver} ({row.team}) | Grid: {row.grid_position} | Ensemble Top 5 probability: {row.top5_probability_ensemble:.2%}")
     print("\nFull top 5 probability table (Ensemble):")
     print(out.to_string(index=False))
     # Optionally, print top 5s for each model
@@ -212,51 +288,80 @@ def main():
     print("\nTop 5 predicted finishers (XGBoost only):")
     print(out.sort_values('top5_probability_xgb', ascending=False).head(5)[['driver','team','grid_position','top5_probability_xgb']])
 
-def fetch_and_print_latest_official_results():
-    import requests
-    API = 'https://api.openf1.org/v1'
-    # Get latest race session
-    resp = requests.get(f'{API}/sessions?session_type=Race')
+    # After predictions, only fetch and print actual results if the race has already happened
+    race_date = None
     try:
-        sessions = resp.json()
-    except Exception:
-        print("Could not parse sessions response as JSON:", resp.text)
-        return
-    if not isinstance(sessions, list):
-        print("Unexpected sessions response:", sessions)
-        return
-    if not sessions:
-        print("No race sessions found.")
-        return
-    latest = sorted(sessions, key=lambda x: x['date_start'])[-1]
-    session_key = latest['session_key']
-    year = latest.get('year', '')
-    circuit = latest.get('circuit_short_name', '')
-    session_name = latest.get('session_name', 'Race')
-    print(f"\nOfficial Results for: {session_name} | {circuit} | {year}")
-    # Fetch results
-    results = requests.get(f'{API}/session_result?session_key={session_key}').json()
-    if not results:
-        print("No results found for this session.")
-        return
-
-    # Try to get driver info for mapping
-    driver_info = {}
-    try:
-        drivers = requests.get(f'{API}/drivers').json()
-        for d in drivers:
-            driver_info[str(d.get('driver_number'))] = d.get('full_name', '')
+        # Try to get the race date from the session or meeting info
+        if 'session' in locals() and session is not None and 'date_start' in session:
+            race_date = session['date_start']
+        elif 'latest' in locals() and latest is not None and 'date_start' in latest:
+            race_date = latest['date_start']
     except Exception:
         pass
 
-    print(f"{'Pos':<4} {'Driver':<20} {'Team':<20} {'Time/Retired':<15}")
-    for r in sorted(results, key=lambda x: int(x['position']) if str(x['position']).isdigit() else 99):
-        pos = r.get('position', '') or ''
-        driver = r.get('full_name') or driver_info.get(str(r.get('driver_number', '')), str(r.get('driver_number', ''))) or ''
-        team = r.get('team_name', '') or ''
-        time_ret = r.get('time') or r.get('retired') or ''
-        print(f"{pos:<4} {driver:<20} {team:<20} {time_ret:<15}")
+    show_actual = False
+    if race_date:
+        try:
+            race_dt = datetime.fromisoformat(race_date.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            if race_dt < now:
+                show_actual = True
+        except Exception:
+            pass
+
+    if show_actual:
+        # Fetch and print actual results as before, but map driver_number to name/team
+        try:
+            API = 'https://api.openf1.org/v1'
+            session_key = session['session_key'] if 'session' in locals() and session is not None else None
+            if session_key:
+                results_response = api_request_with_retry(f'{API}/session_result?session_key={session_key}')
+                if results_response and results_response.status_code == 200:
+                    results = results_response.json()
+                    if isinstance(results, list) and len(results) > 0:
+                        # Fetch driver info for mapping
+                        driver_info = {}
+                        team_info = {}
+                        try:
+                            drivers_response = api_request_with_retry(f'{API}/drivers?session_key={session_key}')
+                            if drivers_response and drivers_response.status_code == 200:
+                                drivers = drivers_response.json()
+                                if isinstance(drivers, list):
+                                    for d in drivers:
+                                        if isinstance(d, dict):
+                                            driver_info[str(d.get('driver_number', ''))] = d.get('full_name', '')
+                                            team_info[str(d.get('driver_number', ''))] = d.get('team_name', '')
+                        except Exception as e:
+                            print(f"Error fetching drivers: {e}")
+                        
+                        print("\nActual top 5 finishers:")
+                        # Sort by position (handle int and string like 'DQ')
+                        def pos_key(x):
+                            try:
+                                return int(x.get('position', 99))
+                            except (ValueError, TypeError):
+                                return 99
+                        
+                        sorted_results = sorted(results, key=pos_key)[:5]
+                        for idx, row in enumerate(sorted_results, 1):
+                            if isinstance(row, dict):
+                                driver_num = str(row.get('driver_number', ''))
+                                driver = driver_info.get(driver_num, f"#{driver_num}")
+                                team = team_info.get(driver_num, 'Unknown')
+                                grid = row.get('grid_position', 'Unknown')
+                                pos = row.get('position', 'Unknown')
+                                print(f"{idx}. {driver} ({team}) | Grid: {grid} | Position: {pos}")
+                    else:
+                        print("\nActual results not available - race may not have finished yet.")
+                else:
+                    print(f"\nCould not fetch results - API returned status {results_response.status_code}")
+            else:
+                print("\nNo session key available for results lookup.")
+        except Exception as e:
+            print(f"\nCould not fetch official results: {e}")
+    else:
+        print("\nThis race has not happened yet - no actual results available.")
+        print("Predictions are based on historical data and current season form.")
 
 if __name__ == "__main__":
-    main()
-    fetch_and_print_latest_official_results() 
+    main() 

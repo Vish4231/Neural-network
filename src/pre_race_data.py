@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 # Helper to get all race sessions for all years
 START_YEAR = 2018
-END_YEAR = 2024  # update as needed
+END_YEAR = 2025  # update as needed
 
 def get_race_sessions():
     sessions = []

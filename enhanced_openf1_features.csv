@@ -1,0 +1,21 @@
+driver_number,driver_name,team_name,country_code,weather_stability,rain_probability,temp_variance
+1,Max VERSTAPPEN,Red Bull Racing,NED,0.5,0,0
+2,Logan SARGEANT,Williams,USA,0.5,0,0
+4,Lando NORRIS,McLaren,GBR,0.5,0,0
+10,Pierre GASLY,Alpine,FRA,0.5,0,0
+11,Sergio PEREZ,Red Bull Racing,MEX,0.5,0,0
+14,Fernando ALONSO,Aston Martin,ESP,0.5,0,0
+16,Charles LECLERC,Ferrari,MON,0.5,0,0
+18,Lance STROLL,Aston Martin,CAN,0.5,0,0
+20,Kevin MAGNUSSEN,Haas F1 Team,DEN,0.5,0,0
+22,Yuki TSUNODA,AlphaTauri,JPN,0.5,0,0
+23,Alexander ALBON,Williams,THA,0.5,0,0
+24,ZHOU Guanyu,Alfa Romeo,CHN,0.5,0,0
+27,Nico HULKENBERG,Haas F1 Team,GER,0.5,0,0
+31,Esteban OCON,Alpine,FRA,0.5,0,0
+40,Liam LAWSON,AlphaTauri,NZL,0.5,0,0
+44,Lewis HAMILTON,Mercedes,GBR,0.5,0,0
+55,Carlos SAINZ,Ferrari,ESP,0.5,0,0
+63,George RUSSELL,Mercedes,GBR,0.5,0,0
+77,Valtteri BOTTAS,Alfa Romeo,FIN,0.5,0,0
+81,Oscar PIASTRI,McLaren,AUS,0.5,0,0

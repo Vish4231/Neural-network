@@ -2,4 +2,9 @@ pandas
 requests
 numpy
 scikit-learn
-tensorflow 
+tensorflow
+xgboost
+joblib
+matplotlib
+seaborn
+pyarrow
