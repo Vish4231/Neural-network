@@ -251,30 +251,30 @@ def main():
         if circuit_sessions:
             fallback_session = sorted(circuit_sessions, key=lambda x: (x['year'], x['date_start']), reverse=True)[0]
             drivers = get_driver_info(fallback_session['session_key'])
-    # --- Manual fallback for Spa: use Silverstone lineup from the same year if still not found ---
-    if (not drivers or len(drivers) == 0) and circuit.lower() in ["spa", "spa-francorchamps"] and YEAR == 2025:
-        print("[MANUAL FALLBACK] No driver lineup found for Spa 2025. Using user-provided manual lineup.")
+    # --- Manual fallback for Imola 2025: use user-provided 2025 grid ---
+    if (not drivers or len(drivers) == 0) and circuit.lower() in ["imola"] and YEAR == 2025:
+        print("[MANUAL FALLBACK] No driver lineup found for Imola 2025. Using user-provided 2025 grid.")
         manual_lineup = [
-            {"country": "United Kingdom", "driver_name": "L. Norris", "team_name": "McLaren", "driver_number": 4},
-            {"country": "Australia", "driver_name": "O. Piastri", "team_name": "McLaren", "driver_number": 81},
-            {"country": "Germany", "driver_name": "N. Hülkenberg", "team_name": "Kick Sauber", "driver_number": 27},
-            {"country": "United Kingdom", "driver_name": "L. Hamilton", "team_name": "Ferrari", "driver_number": 44},
-            {"country": "Netherlands", "driver_name": "M. Verstappen", "team_name": "Red Bull", "driver_number": 1},
-            {"country": "France", "driver_name": "P. Gasly", "team_name": "Alpine", "driver_number": 10},
-            {"country": "Canada", "driver_name": "L. Stroll", "team_name": "Aston Martin", "driver_number": 18},
-            {"country": "Thailand", "driver_name": "A. Albon", "team_name": "Williams", "driver_number": 23},
-            {"country": "Spain", "driver_name": "F. Alonso", "team_name": "Aston Martin", "driver_number": 14},
-            {"country": "United Kingdom", "driver_name": "G. Russell", "team_name": "Mercedes", "driver_number": 63},
-            {"country": "United Kingdom", "driver_name": "O. Bearman", "team_name": "Haas", "driver_number": 87},
-            {"country": "Spain", "driver_name": "C. Sainz Jr.", "team_name": "Williams", "driver_number": 55},
-            {"country": "France", "driver_name": "E. Ocon", "team_name": "Haas", "driver_number": 31},
-            {"country": "Monaco", "driver_name": "C. Leclerc", "team_name": "Ferrari", "driver_number": 16},
-            {"country": "Japan", "driver_name": "Y. Tsunoda", "team_name": "Red Bull", "driver_number": 22},
-            {"country": "Italy", "driver_name": "A.K. Antonelli", "team_name": "Mercedes", "driver_number": 12},
-            {"country": "France", "driver_name": "I. Hadjar", "team_name": "RB", "driver_number": 6},
-            {"country": "Brazil", "driver_name": "G. Bortoleto", "team_name": "Kick Sauber", "driver_number": 5},
-            {"country": "New Zealand", "driver_name": "L. Lawson", "team_name": "RB", "driver_number": 30},
-            {"country": "Argentina", "driver_name": "F. Colapinto", "team_name": "Alpine", "driver_number": 43},
+            {"country": "United Kingdom", "driver_name": "Lando Norris", "team_name": "McLaren Mercedes", "driver_number": 4},
+            {"country": "Australia", "driver_name": "Oscar Piastri", "team_name": "McLaren Mercedes", "driver_number": 81},
+            {"country": "Germany", "driver_name": "Nico Hulkenberg", "team_name": "Kick Sauber Ferrari", "driver_number": 27},
+            {"country": "United Kingdom", "driver_name": "Lewis Hamilton", "team_name": "Ferrari", "driver_number": 44},
+            {"country": "Netherlands", "driver_name": "Max Verstappen", "team_name": "Red Bull Racing Honda RBPT", "driver_number": 1},
+            {"country": "France", "driver_name": "Pierre Gasly", "team_name": "Alpine Renault", "driver_number": 10},
+            {"country": "Canada", "driver_name": "Lance Stroll", "team_name": "Aston Martin Aramco Mercedes", "driver_number": 18},
+            {"country": "Thailand", "driver_name": "Alexander Albon", "team_name": "Williams Mercedes", "driver_number": 23},
+            {"country": "Spain", "driver_name": "Fernando Alonso", "team_name": "Aston Martin Aramco Mercedes", "driver_number": 14},
+            {"country": "United Kingdom", "driver_name": "George Russell", "team_name": "Mercedes", "driver_number": 63},
+            {"country": "United Kingdom", "driver_name": "Oliver Bearman", "team_name": "Haas Ferrari", "driver_number": 87},
+            {"country": "Spain", "driver_name": "Carlos Sainz", "team_name": "Williams Mercedes", "driver_number": 55},
+            {"country": "France", "driver_name": "Esteban Ocon", "team_name": "Haas Ferrari", "driver_number": 31},
+            {"country": "Monaco", "driver_name": "Charles Leclerc", "team_name": "Ferrari", "driver_number": 16},
+            {"country": "Japan", "driver_name": "Yuki Tsunoda", "team_name": "Racing Bulls Honda RBPT", "driver_number": 22},
+            {"country": "Italy", "driver_name": "Kimi Antonelli", "team_name": "Mercedes", "driver_number": 12},
+            {"country": "France", "driver_name": "Isack Hadjar", "team_name": "Racing Bulls Honda RBPT", "driver_number": 6},
+            {"country": "Brazil", "driver_name": "Gabriel Bortoleto", "team_name": "Kick Sauber Ferrari", "driver_number": 5},
+            {"country": "New Zealand", "driver_name": "Liam Lawson", "team_name": "Racing Bulls Honda RBPT", "driver_number": 30},
+            {"country": "Argentina", "driver_name": "Franco Colapinto", "team_name": "Alpine Renault", "driver_number": 43},
         ]
         drivers = []
         for entry in manual_lineup:
@@ -426,28 +426,57 @@ def main():
     nn_probs = model.predict(df[features]).flatten()
     # Predict with XGBoost
     xgb_probs = xgb_model.predict_proba(df[features])[:,1]
+    # Predict with LightGBM
+    import lightgbm as lgb
+    lgbm_model = lgb.Booster(model_file='model/lgbm_top5.txt')
+    lgbm_probs = lgbm_model.predict(df[features])
+    # Predict with CatBoost
+    import catboost as cb
+    cat_model = cb.CatBoostClassifier()
+    cat_model.load_model('model/catboost_top5.cbm')
+    cat_probs = cat_model.predict_proba(df[features])[:,1]
     # Ensemble: average probabilities
-    ensemble_probs = (nn_probs + xgb_probs) / 2
+    ensemble_probs = (nn_probs + xgb_probs + lgbm_probs + cat_probs) / 4
+    # Max-prob (best possibility) ensemble
+    max_probs = np.max(np.vstack([nn_probs, xgb_probs, lgbm_probs, cat_probs]), axis=0)
     df['top5_probability_nn'] = nn_probs
     df['top5_probability_xgb'] = xgb_probs
+    df['top5_probability_lgbm'] = lgbm_probs
+    df['top5_probability_cat'] = cat_probs
     df['top5_probability_ensemble'] = ensemble_probs
+    df['top5_probability_max'] = max_probs
     # Output top 5 for each
     out = df.copy()
     out['driver'] = grid and [driver_map.get(g['driver_number'], {}).get('full_name', g['driver_number']) for g in grid] or None
     out['team'] = grid and [driver_map.get(g['driver_number'], {}).get('team_name', None) for g in grid] or None
-    out = out[['driver', 'team', 'grid_position', 'top5_probability_nn', 'top5_probability_xgb', 'top5_probability_ensemble']]
-    out = out.sort_values('top5_probability_ensemble', ascending=False).reset_index(drop=True)
-    print("\nTop 5 predicted finishers (Ensemble):")
-    for idx, row in enumerate(out.itertuples(), 1):
+    out = out[['driver', 'team', 'grid_position', 'top5_probability_nn', 'top5_probability_xgb', 'top5_probability_lgbm', 'top5_probability_cat', 'top5_probability_ensemble', 'top5_probability_max']]
+    # Print combined best possibility (max-prob) top 5
+    out_max = out.sort_values('top5_probability_max', ascending=False).reset_index(drop=True)
+    print("\nTop 5 predicted finishers (Combined Best Possibility - Max Probability):")
+    for idx, row in enumerate(out_max.itertuples(), 1):
+        medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][idx-1] if idx <= 5 else ""
+        print(f"{idx}. {medal} {row.driver} ({row.team}) | Grid: {row.grid_position} | Max Top 5 probability: {row.top5_probability_max:.2%}")
+        if idx == 5:
+            break
+    print("\nFull top 5 probability table (Combined Best Possibility):")
+    print(out_max.to_string(index=False))
+    # Print ensemble average top 5
+    out_ens = out.sort_values('top5_probability_ensemble', ascending=False).reset_index(drop=True)
+    print("\nTop 5 predicted finishers (Ensemble Average):")
+    for idx, row in enumerate(out_ens.itertuples(), 1):
         medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][idx-1] if idx <= 5 else ""
         print(f"{idx}. {medal} {row.driver} ({row.team}) | Grid: {row.grid_position} | Ensemble Top 5 probability: {row.top5_probability_ensemble:.2%}")
-    print("\nFull top 5 probability table (Ensemble):")
-    print(out.to_string(index=False))
+        if idx == 5:
+            break
     # Optionally, print top 5s for each model
     print("\nTop 5 predicted finishers (Neural Net only):")
     print(out.sort_values('top5_probability_nn', ascending=False).head(5)[['driver','team','grid_position','top5_probability_nn']])
     print("\nTop 5 predicted finishers (XGBoost only):")
     print(out.sort_values('top5_probability_xgb', ascending=False).head(5)[['driver','team','grid_position','top5_probability_xgb']])
+    print("\nTop 5 predicted finishers (LightGBM only):")
+    print(out.sort_values('top5_probability_lgbm', ascending=False).head(5)[['driver','team','grid_position','top5_probability_lgbm']])
+    print("\nTop 5 predicted finishers (CatBoost only):")
+    print(out.sort_values('top5_probability_cat', ascending=False).head(5)[['driver','team','grid_position','top5_probability_cat']])
 
     # After predictions, only fetch and print actual results if the race has already happened
     race_date = None
