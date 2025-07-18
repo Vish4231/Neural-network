@@ -287,7 +287,7 @@ def main():
                 # Ensure correct dtypes for encoding/scaling
                 for col in cat_features:
                     df_predict[col] = df_predict[col].astype(str)
-                # Now safe to encode and scale
+                # Now safe to encode and scale (for local CSV fallback and all paths)
                 for col in cat_features:
                     if col in encoders:
                         le = encoders[col]
