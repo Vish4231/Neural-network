@@ -160,21 +160,21 @@ def main():
         YEAR = session['year']
         CIRCUIT = session.get('circuit_short_name', None)
     else:
-        sessions_url = f"{API}/sessions?session_type=Race"
-        if YEAR:
-            sessions_url += f"&year={YEAR}"
-        sessions = requests.get(sessions_url).json()
-        if not isinstance(sessions, list):
-            print(f"Unexpected sessions response: {sessions}")
-            return
-        session = None
-        if CIRCUIT:
+    sessions_url = f"{API}/sessions?session_type=Race"
+    if YEAR:
+        sessions_url += f"&year={YEAR}"
+    sessions = requests.get(sessions_url).json()
+    if not isinstance(sessions, list):
+        print(f"Unexpected sessions response: {sessions}")
+        return
+    session = None
+    if CIRCUIT:
             # Try to match circuit_short_name (case-insensitive) for the requested year
-            for s in sessions:
+        for s in sessions:
                 if str(s.get('circuit_short_name', '')).lower() == CIRCUIT.lower() and (YEAR is None or s.get('year', None) == YEAR):
-                    session = s
-                    break
-            if not session:
+                session = s
+                break
+        if not session:
                 # If not found, search all years for the requested circuit
                 all_sessions_url = f"{API}/sessions?session_type=Race"
                 all_sessions = requests.get(all_sessions_url).json()
@@ -187,13 +187,13 @@ def main():
                     session['year'] = YEAR
                 else:
                     available = sorted(set(s.get('circuit_short_name','') for s in all_sessions))
-                    print(f"Circuit '{CIRCUIT}' not found for year {YEAR}. Available circuits:")
-                    for c in available:
-                        print(f"  - {c}")
-                    return
-        else:
-            # Default to latest session if no circuit specified
-            session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
+            print(f"Circuit '{CIRCUIT}' not found for year {YEAR}. Available circuits:")
+            for c in available:
+                print(f"  - {c}")
+            return
+    else:
+        # Default to latest session if no circuit specified
+        session = sorted(sessions, key=lambda x: x['date_start'], reverse=True)[0]
     # Use 'session' for all further logic
     session_key = session['session_key']
     meeting_key = session['meeting_key']
@@ -356,7 +356,7 @@ def main():
         else:
             drv_hist = pd.DataFrame()
         if drv_hist.empty and 'position' in hist.columns:
-            drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
+        drv_hist = hist[hist['driver_number'] == drv_num].sort_values('session_key')
         row['driver_form_last3'] = drv_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not drv_hist.empty else None
         # Team form: use all historical results for this team at this circuit
         team = drv.get('team_name', None)
@@ -365,7 +365,7 @@ def main():
         else:
             team_hist = pd.DataFrame()
         if team_hist.empty and 'position' in hist.columns:
-            team_hist = hist[hist['team_name'] == team].sort_values('session_key')
+        team_hist = hist[hist['team_name'] == team].sort_values('session_key')
         row['team_form_last3'] = team_hist['position'].shift(1).rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else None
         # Advanced features (fill with None or compute if possible)
         row['qualifying_gap_to_pole'] = None
