@@ -178,6 +178,16 @@ if np.isnan(stack_X_train).any():
     inds = np.where(np.isnan(stack_X_train))
     stack_X_train[inds] = np.take(col_means, inds[1])
 
+# Impute any NaNs in stack_X_test with column means
+if np.isnan(stack_X_test).any():
+    print('Warning: NaNs found in stack_X_test, imputing with column means.')
+    for i in range(stack_X_test.shape[1]):
+        if np.isnan(stack_X_test[:, i]).all():
+            stack_X_test[:, i] = 0.0
+    col_means_test = np.nanmean(stack_X_test, axis=0)
+    inds_test = np.where(np.isnan(stack_X_test))
+    stack_X_test[inds_test] = np.take(col_means_test, inds_test[1])
+
 meta_model.fit(stack_X_train, y_train)
 meta_pred = meta_model.predict(stack_X_test)
 print("Stacking Meta-Model Test accuracy:", accuracy_score(y_test, meta_pred))
