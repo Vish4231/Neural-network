@@ -55,6 +55,33 @@ def normalize_circuit_name(name):
     norm = name.strip().lower().replace('-', ' ').replace('_', ' ')
     return circuit_aliases.get(norm, norm)
 
+# --- Make track_features available at module level ---
+track_features = {
+    'Bahrain International Circuit': {'length_km': 5.412, 'turns': 15, 'elevation': 10, 'drs_zones': 3, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
+    'Jeddah Street Circuit': {'length_km': 6.175, 'turns': 27, 'elevation': 5, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.01, 'track_type': 'street'},
+    'Albert Park Circuit': {'length_km': 5.279, 'turns': 16, 'elevation': 5, 'drs_zones': 4, 'grip': 6, 'rain_prob': 0.15, 'track_type': 'semi-street'},
+    'Baku City Circuit': {'length_km': 6.003, 'turns': 20, 'elevation': 2, 'drs_zones': 2, 'grip': 5, 'rain_prob': 0.10, 'track_type': 'street'},
+    'Miami International Autodrome': {'length_km': 5.410, 'turns': 19, 'elevation': 1, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.20, 'track_type': 'street'},
+    'Imola': {'length_km': 4.909, 'turns': 21, 'elevation': 30, 'drs_zones': 1, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'permanent'},
+    'Circuit de Monaco': {'length_km': 3.340, 'turns': 19, 'elevation': 30, 'drs_zones': 1, 'grip': 5, 'rain_prob': 0.20, 'track_type': 'street'},
+    'Circuit de Barcelona': {'length_km': 4.655, 'turns': 16, 'elevation': 30, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.10, 'track_type': 'permanent'},
+    'Circuit Gilles Villeneuve': {'length_km': 4.361, 'turns': 14, 'elevation': 5, 'drs_zones': 3, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'semi-street'},
+    'Red Bull Ring': {'length_km': 4.326, 'turns': 10, 'elevation': 65, 'drs_zones': 3, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
+    'Silverstone Circuit': {'length_km': 5.891, 'turns': 18, 'elevation': 11, 'drs_zones': 2, 'grip': 9, 'rain_prob': 0.30, 'track_type': 'permanent'},
+    'Hungaroring': {'length_km': 4.381, 'turns': 14, 'elevation': 34, 'drs_zones': 1, 'grip': 7, 'rain_prob': 0.20, 'track_type': 'permanent'},
+    'Circuit de Spa-Francorchamps': {'length_km': 7.004, 'turns': 19, 'elevation': 100, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.40, 'track_type': 'permanent'},
+    'Circuit Zandvoort': {'length_km': 4.459, 'turns': 14, 'elevation': 8, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'permanent'},
+    'Autodromo Nazionale di Monza': {'length_km': 5.793, 'turns': 17, 'elevation': 13, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
+    'Marina Bay Street Circuit': {'length_km': 5.063, 'turns': 23, 'elevation': 4, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.30, 'track_type': 'street'},
+    'Suzuka International Racing Course': {'length_km': 5.807, 'turns': 18, 'elevation': 40, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.35, 'track_type': 'permanent'},
+    'Losail International Circuit': {'length_km': 5.380, 'turns': 16, 'elevation': 6, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
+    'Circuit of the Americas': {'length_km': 5.513, 'turns': 20, 'elevation': 41, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
+    'Autódromo Hermanos Rodríguez': {'length_km': 4.304, 'turns': 17, 'elevation': 30, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.20, 'track_type': 'permanent'},
+    'Autódromo José Carlos Pace': {'length_km': 4.309, 'turns': 15, 'elevation': 43, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.30, 'track_type': 'permanent'},
+    'Las Vegas Street Circuit': {'length_km': 6.120, 'turns': 17, 'elevation': 5, 'drs_zones': 2, 'grip': 6, 'rain_prob': 0.05, 'track_type': 'street'},
+    'Yas Marina Circuit': {'length_km': 5.554, 'turns': 21, 'elevation': 5, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
+}
+
 def load_and_engineer_features():
     """
     Loads all historical data from the 'archive (1)' directory,
@@ -120,31 +147,6 @@ def load_and_engineer_features():
     results['overtaking_difficulty'] = results['circuit'].map(overtaking_map).fillna(3)
 
     # Add detailed track features
-    track_features = {
-        'Bahrain International Circuit': {'length_km': 5.412, 'turns': 15, 'elevation': 10, 'drs_zones': 3, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
-        'Jeddah Street Circuit': {'length_km': 6.175, 'turns': 27, 'elevation': 5, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.01, 'track_type': 'street'},
-        'Albert Park Circuit': {'length_km': 5.279, 'turns': 16, 'elevation': 5, 'drs_zones': 4, 'grip': 6, 'rain_prob': 0.15, 'track_type': 'semi-street'},
-        'Baku City Circuit': {'length_km': 6.003, 'turns': 20, 'elevation': 2, 'drs_zones': 2, 'grip': 5, 'rain_prob': 0.10, 'track_type': 'street'},
-        'Miami International Autodrome': {'length_km': 5.410, 'turns': 19, 'elevation': 1, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.20, 'track_type': 'street'},
-        'Imola': {'length_km': 4.909, 'turns': 21, 'elevation': 30, 'drs_zones': 1, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'permanent'},
-        'Circuit de Monaco': {'length_km': 3.340, 'turns': 19, 'elevation': 30, 'drs_zones': 1, 'grip': 5, 'rain_prob': 0.20, 'track_type': 'street'},
-        'Circuit de Barcelona': {'length_km': 4.655, 'turns': 16, 'elevation': 30, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.10, 'track_type': 'permanent'},
-        'Circuit Gilles Villeneuve': {'length_km': 4.361, 'turns': 14, 'elevation': 5, 'drs_zones': 3, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'semi-street'},
-        'Red Bull Ring': {'length_km': 4.326, 'turns': 10, 'elevation': 65, 'drs_zones': 3, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
-        'Silverstone Circuit': {'length_km': 5.891, 'turns': 18, 'elevation': 11, 'drs_zones': 2, 'grip': 9, 'rain_prob': 0.30, 'track_type': 'permanent'},
-        'Hungaroring': {'length_km': 4.381, 'turns': 14, 'elevation': 34, 'drs_zones': 1, 'grip': 7, 'rain_prob': 0.20, 'track_type': 'permanent'},
-        'Circuit de Spa-Francorchamps': {'length_km': 7.004, 'turns': 19, 'elevation': 100, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.40, 'track_type': 'permanent'},
-        'Circuit Zandvoort': {'length_km': 4.459, 'turns': 14, 'elevation': 8, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.25, 'track_type': 'permanent'},
-        'Autodromo Nazionale di Monza': {'length_km': 5.793, 'turns': 17, 'elevation': 13, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
-        'Marina Bay Street Circuit': {'length_km': 5.063, 'turns': 23, 'elevation': 4, 'drs_zones': 3, 'grip': 6, 'rain_prob': 0.30, 'track_type': 'street'},
-        'Suzuka International Racing Course': {'length_km': 5.807, 'turns': 18, 'elevation': 40, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.35, 'track_type': 'permanent'},
-        'Losail International Circuit': {'length_km': 5.380, 'turns': 16, 'elevation': 6, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
-        'Circuit of the Americas': {'length_km': 5.513, 'turns': 20, 'elevation': 41, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.20, 'track_type': 'permanent'},
-        'Autódromo Hermanos Rodríguez': {'length_km': 4.304, 'turns': 17, 'elevation': 30, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.20, 'track_type': 'permanent'},
-        'Autódromo José Carlos Pace': {'length_km': 4.309, 'turns': 15, 'elevation': 43, 'drs_zones': 2, 'grip': 8, 'rain_prob': 0.30, 'track_type': 'permanent'},
-        'Las Vegas Street Circuit': {'length_km': 6.120, 'turns': 17, 'elevation': 5, 'drs_zones': 2, 'grip': 6, 'rain_prob': 0.05, 'track_type': 'street'},
-        'Yas Marina Circuit': {'length_km': 5.554, 'turns': 21, 'elevation': 5, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
-    }
     for feature in ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type', 'overtaking_difficulty']:
         results[feature] = results['circuit'].map(lambda x: track_features.get(normalize_circuit_name(x), {}).get(feature, np.nan))
 

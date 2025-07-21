@@ -283,6 +283,17 @@ def main():
 
     # Use the meta-model for the final ensemble prediction
     stack_X = np.vstack([xgb_probs, lgbm_probs, cat_probs, nn_probs]).T
+
+    # Impute any NaNs in stack_X before meta-model prediction
+    if np.isnan(stack_X).any():
+        print('Warning: NaNs found in stack_X for prediction, imputing with column means.')
+        for i in range(stack_X.shape[1]):
+            if np.isnan(stack_X[:, i]).all():
+                stack_X[:, i] = 0.0
+        col_means = np.nanmean(stack_X, axis=0)
+        inds = np.where(np.isnan(stack_X))
+        stack_X[inds] = np.take(col_means, inds[1])
+
     ensemble_probs = artifacts['meta_model'].predict_proba(stack_X)[:, 1]
 
     # Display results
