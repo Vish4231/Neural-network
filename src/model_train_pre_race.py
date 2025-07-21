@@ -29,8 +29,8 @@ features = [col for col in df.columns if col not in [target, 'raceId']]
 cat_features = ['team_name', 'driver_name', 'circuit']
 num_features = [f for f in features if f not in cat_features and f != 'year']
 
-# Filter for years 1950-2024
-df = df[(df['year'] >= 1950) & (df['year'] <= 2024)].copy()
+# Filter for years 1950-2025
+df = df[(df['year'] >= 1950) & (df['year'] <= 2025)].copy()
 
 # --- 2. Preprocessing ---
 print("\nStarting preprocessing...")
