@@ -11,7 +11,7 @@ from tensorflow import keras
 import sys
 
 # Import the centralized feature engineering function
-from feature_engineering import load_and_engineer_features
+from feature_engineering import load_and_engineer_features, track_features, normalize_circuit_name
 
 # --- Configuration ---
 MODELS_DIR = 'model'
@@ -153,38 +153,19 @@ def normalize_circuit_name(name):
 
 # --- Feature Generation for Prediction ---
 def create_prediction_df(lineup, year, circuit, combined_df):
-    """
-    Creates a feature DataFrame for an upcoming race by calculating
-    rolling features from the combined historical and current season data.
-    """
-    # Track-specific mappings (should match feature_engineering.py)
-    track_type_map = {
-        'monaco': 'street', 'baku city circuit': 'street', 'singapore': 'street', 'jeddah street circuit': 'street',
-        'silverstone circuit': 'permanent', 'circuit de spa-francorchamps': 'permanent', 'autodromo nazionale di monza': 'permanent',
-        'hungaroring': 'permanent', 'suzuka international racing course': 'permanent', 'interlagos': 'permanent',
-    }
-    overtaking_map = {
-        'monaco': 1, 'baku city circuit': 4, 'singapore': 2, 'jeddah street circuit': 5,
-        'silverstone circuit': 4, 'circuit de spa-francorchamps': 5, 'autodromo nazionale di monza': 5, 'hungaroring': 2, 'suzuka international racing course': 3, 'interlagos': 4,
-    }
     norm_circuit = normalize_circuit_name(circuit)
-    track_type = track_type_map.get(norm_circuit, 'permanent')
-    overtaking_difficulty = overtaking_map.get(norm_circuit, 3)
+    track_info = track_features.get(norm_circuit, {})
+    track_type = track_info.get('track_type', 'permanent')
+    overtaking_difficulty = track_info.get('overtaking_difficulty', 3)
 
     pred_rows = []
-
     for i, driver_info in lineup.iterrows():
         driver_name = driver_info['driver_name']
         team_name = driver_info['team_name']
-
-        # Find the driver's data in the combined history
         driver_hist = combined_df[combined_df['driver_name'] == driver_name].copy()
         driver_hist = driver_hist.sort_values('raceId')
-
-        # Find the team's data in the combined history
         team_hist = combined_df[combined_df['team_name'] == team_name].copy()
         team_hist = team_hist.sort_values('raceId')
-
         row = {
             'year': year,
             'circuit': circuit,
@@ -206,9 +187,7 @@ def create_prediction_df(lineup, year, circuit, combined_df):
             'overtaking_difficulty': overtaking_difficulty
         }
         pred_rows.append(row)
-
     pred_df = pd.DataFrame(pred_rows)
-    # Ensure columns are in the same order as training
     features = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
     return pred_df[features]
 

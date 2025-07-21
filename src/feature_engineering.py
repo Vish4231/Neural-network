@@ -148,6 +148,15 @@ def load_and_engineer_features():
     for feature in ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type', 'overtaking_difficulty']:
         results[feature] = results['circuit'].map(lambda x: track_features.get(normalize_circuit_name(x), {}).get(feature, np.nan))
 
+    # After mapping all features, fill missing values for new track features
+    numeric_track_features = ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'overtaking_difficulty']
+    for col in numeric_track_features:
+        if col in results.columns:
+            results[col] = results[col].fillna(results[col].median())
+    if 'track_type' in results.columns:
+        mode = results['track_type'].mode()[0] if not results['track_type'].mode().empty else 'Unknown'
+        results['track_type'] = results['track_type'].fillna(mode)
+
     # Select and rename features
     results['driver_name'] = results['driver_forename'] + ' ' + results['driver_surname']
     
