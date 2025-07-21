@@ -150,14 +150,25 @@ def load_and_engineer_features():
     for feature in ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type', 'overtaking_difficulty']:
         results[feature] = results['circuit'].map(lambda x: track_features.get(normalize_circuit_name(x), {}).get(feature, np.nan))
 
-    # After mapping all features, fill missing values for new track features
-    numeric_track_features = ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'overtaking_difficulty']
-    for col in numeric_track_features:
+    # --- Outlier Removal for Key Numeric Features ---
+    # Remove outliers using IQR for lap times, pit stops, and form features
+    outlier_cols = ['q1', 'q2', 'q3', 'avg_lap_time', 'driver_form_last3', 'driver_form_last5', 'team_form_last3', 'team_form_last5', 'pit_stop_count']
+    for col in outlier_cols:
         if col in results.columns:
-            results[col] = results[col].fillna(results[col].median())
-    if 'track_type' in results.columns:
-        mode = results['track_type'].mode()[0] if not results['track_type'].mode().empty else 'Unknown'
-        results['track_type'] = results['track_type'].fillna(mode)
+            Q1 = results[col].quantile(0.25)
+            Q3 = results[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower = Q1 - 1.5 * IQR
+            upper = Q3 + 1.5 * IQR
+            results = results[(results[col].isna()) | ((results[col] >= lower) & (results[col] <= upper))]
+    # --- Impute missing values for all features ---
+    # Numeric features: median
+    for col in results.select_dtypes(include=[np.number]).columns:
+        results[col] = results[col].fillna(results[col].median())
+    # Categorical features: mode
+    for col in results.select_dtypes(include=['object']).columns:
+        mode = results[col].mode()[0] if not results[col].mode().empty else 'Unknown'
+        results[col] = results[col].fillna(mode)
 
     # Select and rename features
     results['driver_name'] = results['driver_forename'] + ' ' + results['driver_surname']

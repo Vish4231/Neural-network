@@ -91,77 +91,79 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 print(f"Training data shape: {X_train.shape}")
 print(f"Test data shape: {X_test.shape}")
 
-# --- XGBoost ---
-print("\n--- Training XGBoost ---")
+# --- XGBoost with GridSearchCV ---
+xgb_params = {'max_depth': [3, 5, 7], 'learning_rate': [0.01, 0.1], 'n_estimators': [100, 200]}
 xgb_model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss')
-xgb_model.fit(X_train, y_train)
-xgb_pred = xgb_model.predict(X_test)
+xgb_grid = GridSearchCV(xgb_model, xgb_params, cv=5, scoring='accuracy', n_jobs=-1)
+xgb_grid.fit(X_train, y_train)
+print("Best XGBoost params:", xgb_grid.best_params_)
+xgb_pred = xgb_grid.predict(X_test)
 print("XGBoost Test accuracy:", accuracy_score(y_test, xgb_pred))
 print(classification_report(y_test, xgb_pred, target_names=['Not Top 5', 'Top 5']))
-xgb_model.save_model('model/xgb_top5.model')
+xgb_grid.best_estimator_.save_model('model/xgb_top5.model')
 
-# --- LightGBM ---
-print("\n--- Training LightGBM ---")
+# --- LightGBM with GridSearchCV ---
+lgbm_params = {'max_depth': [3, 5, 7], 'learning_rate': [0.01, 0.1], 'n_estimators': [100, 200]}
 lgbm_model = lgb.LGBMClassifier()
-lgbm_model.fit(X_train, y_train)
-lgbm_pred = lgbm_model.predict(X_test)
+lgbm_grid = GridSearchCV(lgbm_model, lgbm_params, cv=5, scoring='accuracy', n_jobs=-1)
+lgbm_grid.fit(X_train, y_train)
+print("Best LightGBM params:", lgbm_grid.best_params_)
+lgbm_pred = lgbm_grid.predict(X_test)
 print("LightGBM Test accuracy:", accuracy_score(y_test, lgbm_pred))
 print(classification_report(y_test, lgbm_pred, target_names=['Not Top 5', 'Top 5']))
-lgbm_model.booster_.save_model('model/lgbm_top5.txt')
+lgbm_grid.best_estimator_.booster_.save_model('model/lgbm_top5.txt')
 
-# --- CatBoost ---
-print("\n--- Training CatBoost ---")
+# --- CatBoost with GridSearchCV ---
+cat_params = {'depth': [3, 5, 7], 'learning_rate': [0.01, 0.1], 'iterations': [100, 200]}
 cat_model = cb.CatBoostClassifier(verbose=0, cat_features=cat_features)
-cat_model.fit(X_train, y_train)
-cat_pred = cat_model.predict(X_test)
+cat_grid = GridSearchCV(cat_model, cat_params, cv=5, scoring='accuracy', n_jobs=-1)
+cat_grid.fit(X_train, y_train)
+print("Best CatBoost params:", cat_grid.best_params_)
+cat_pred = cat_grid.predict(X_test)
 print("CatBoost Test accuracy:", accuracy_score(y_test, cat_pred))
 print(classification_report(y_test, cat_pred, target_names=['Not Top 5', 'Top 5']))
-cat_model.save_model('model/catboost_top5.cbm')
+cat_grid.best_estimator_.save_model('model/catboost_top5.cbm')
 
-# --- Keras Neural Network (Advanced Ensemble Architecture) ---
-print("\n--- Training Keras NN (Advanced Ensemble Architecture) ---")
-advanced_models = AdvancedF1Models()
-advanced_training = AdvancedTraining()
-
-# Build the model using the advanced architecture
-nn_model = advanced_models.build_ensemble_model(input_shape=(X_train.shape[1],))
-
-# Get custom callbacks for smarter training
-callbacks = advanced_training.create_custom_callbacks()
-
-# Compile the model
-nn_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-# Train the model with a higher epoch count, relying on EarlyStopping
-print("Training advanced NN model (will stop early if no improvement)...")
-history = nn_model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2, verbose=0, callbacks=callbacks)
-
-print(f"Advanced NN training complete. Stopped at epoch: {len(history.history['loss'])}")
-
-# Evaluate the advanced model
-y_pred_nn = (nn_model.predict(X_test) > 0.5).astype(int)
-print("Keras Advanced NN Test accuracy:", accuracy_score(y_test, y_pred_nn))
-print(classification_report(y_test, y_pred_nn, target_names=['Not Top 5', 'Top 5']))
-
-# Save the newly trained advanced model
-nn_model.save('model/pre_race_model_top5.keras')
+# --- Neural Net with KerasClassifier and GridSearchCV ---
+def build_nn_model(optimizer='adam', dropout=0.2):
+    model = keras.Sequential([
+        layers.Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
+        layers.BatchNormalization(),
+        layers.Dropout(dropout),
+        layers.Dense(32, activation='relu'),
+        layers.BatchNormalization(),
+        layers.Dropout(dropout),
+        layers.Dense(1, activation='sigmoid')
+    ])
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+from scikeras.wrappers import KerasClassifier
+nn_model = KerasClassifier(model=build_nn_model, epochs=30, batch_size=32, verbose=0)
+nn_params = {'optimizer': ['adam', 'rmsprop'], 'dropout': [0.2, 0.4]}
+nn_grid = GridSearchCV(nn_model, nn_params, cv=3, scoring='accuracy', n_jobs=-1)
+nn_grid.fit(X_train, y_train)
+print("Best NN params:", nn_grid.best_params_)
+nn_pred = nn_grid.predict(X_test)
+print("Neural Net Test accuracy:", accuracy_score(y_test, nn_pred))
+print(classification_report(y_test, nn_pred, target_names=['Not Top 5', 'Top 5']))
+joblib.dump(nn_grid.best_estimator_, 'model/pre_race_model_top5.keras')
 
 # --- 4. Stacking Ensemble ---
 print("\n--- Training Stacking Meta-Model ---")
 # Get predictions from base models on the test set
-xgb_probs = xgb_model.predict_proba(X_test)[:, 1]
-lgbm_probs = lgbm_model.predict_proba(X_test)[:, 1]
-cat_probs = cat_model.predict_proba(X_test)[:, 1]
-nn_probs = nn_model.predict(X_test).flatten()
+xgb_probs = xgb_grid.predict_proba(X_test)[:, 1]
+lgbm_probs = lgbm_grid.predict_proba(X_test)[:, 1]
+cat_probs = cat_grid.predict_proba(X_test)[:, 1]
+nn_probs = nn_grid.predict(X_test).flatten()
 
 # Create a new dataset for the meta-model
 stack_X_test = np.vstack([xgb_probs, lgbm_probs, cat_probs, nn_probs]).T
 
 # Also need predictions on the training set to train the meta-model
-xgb_probs_train = xgb_model.predict_proba(X_train)[:, 1]
-lgbm_probs_train = lgbm_model.predict_proba(X_train)[:, 1]
-cat_probs_train = cat_model.predict_proba(X_train)[:, 1]
-nn_probs_train = nn_model.predict(X_train).flatten()
+xgb_probs_train = xgb_grid.predict_proba(X_train)[:, 1]
+lgbm_probs_train = lgbm_grid.predict_proba(X_train)[:, 1]
+cat_probs_train = cat_grid.predict_proba(X_train)[:, 1]
+nn_probs_train = nn_grid.predict(X_train).flatten()
 stack_X_train = np.vstack([xgb_probs_train, lgbm_probs_train, cat_probs_train, nn_probs_train]).T
 
 # Train the meta-model
