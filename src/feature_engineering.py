@@ -151,24 +151,20 @@ def load_and_engineer_features():
         results[feature] = results['circuit'].map(lambda x: track_features.get(normalize_circuit_name(x), {}).get(feature, np.nan))
 
     # --- Outlier Removal for Key Numeric Features ---
-    # Remove outliers using IQR for lap times, pit stops, and form features
-    outlier_cols = ['q1', 'q2', 'q3', 'avg_lap_time', 'driver_form_last3', 'driver_form_last5', 'team_form_last3', 'team_form_last5', 'pit_stop_count']
-    for col in outlier_cols:
-        if col in results.columns:
-            Q1 = results[col].quantile(0.25)
-            Q3 = results[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower = Q1 - 1.5 * IQR
-            upper = Q3 + 1.5 * IQR
-            results = results[(results[col].isna()) | ((results[col] >= lower) & (results[col] <= upper))]
+    # (Removed to preserve class balance and maximize accuracy)
+
     # --- Impute missing values for all features ---
-    # Numeric features: median
     for col in results.select_dtypes(include=[np.number]).columns:
         results[col] = results[col].fillna(results[col].median())
-    # Categorical features: mode
     for col in results.select_dtypes(include=['object']).columns:
         mode = results[col].mode()[0] if not results[col].mode().empty else 'Unknown'
         results[col] = results[col].fillna(mode)
+
+    # Print class distribution for Top 5 vs Not Top 5 after imputation
+    if 'positionOrder' in results.columns:
+        top5 = (results['positionOrder'] <= 5).astype(int)
+        print("Class distribution after imputation (Top 5=1, Not Top 5=0):")
+        print(top5.value_counts(normalize=True))
 
     # Select and rename features
     results['driver_name'] = results['driver_forename'] + ' ' + results['driver_surname']
