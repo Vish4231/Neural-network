@@ -140,7 +140,8 @@ def build_nn_model(optimizer='adam', dropout=0.2):
     return model
 from scikeras.wrappers import KerasClassifier
 nn_model = KerasClassifier(model=build_nn_model, epochs=30, batch_size=32, verbose=0)
-nn_params = {'optimizer': ['adam', 'rmsprop'], 'dropout': [0.2, 0.4]}
+# Use model__ prefix for scikeras param grid
+nn_params = {'model__optimizer': ['adam', 'rmsprop'], 'model__dropout': [0.2, 0.4]}
 nn_grid = GridSearchCV(nn_model, nn_params, cv=3, scoring='accuracy', n_jobs=-1)
 nn_grid.fit(X, y)
 print("Best NN params:", nn_grid.best_params_)
