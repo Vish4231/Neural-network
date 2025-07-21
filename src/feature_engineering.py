@@ -26,6 +26,35 @@ def add_rolling_form(df, form_window=3, form_col='driver_form_last3', group_col=
     )
     return df
 
+circuit_aliases = {
+    'spa-francorchamps': 'circuit de spa-francorchamps',
+    'spa': 'circuit de spa-francorchamps',
+    'silverstone': 'silverstone circuit',
+    'monaco': 'circuit de monaco',
+    'baku': 'baku city circuit',
+    'jeddah': 'jeddah street circuit',
+    'imola': 'imola',
+    'barcelona': 'circuit de barcelona',
+    'montreal': 'circuit gilles villeneuve',
+    'austria': 'red bull ring',
+    'hungary': 'hungaroring',
+    'zandvoort': 'circuit zandvoort',
+    'monza': 'autodromo nazionale di monza',
+    'singapore': 'marina bay street circuit',
+    'suzuka': 'suzuka international racing course',
+    'losail': 'losail international circuit',
+    'cota': 'circuit of the americas',
+    'mexico city': 'autódromo hermanos rodríguez',
+    'interlagos': 'autódromo josé carlos pace',
+    'las vegas': 'las vegas street circuit',
+    'abu dhabi': 'yas marina circuit',
+    # Add more aliases as needed
+}
+
+def normalize_circuit_name(name):
+    norm = name.strip().lower().replace('-', ' ').replace('_', ' ')
+    return circuit_aliases.get(norm, norm)
+
 def load_and_engineer_features():
     """
     Loads all historical data from the 'archive (1)' directory,
@@ -116,8 +145,8 @@ def load_and_engineer_features():
         'Las Vegas Street Circuit': {'length_km': 6.120, 'turns': 17, 'elevation': 5, 'drs_zones': 2, 'grip': 6, 'rain_prob': 0.05, 'track_type': 'street'},
         'Yas Marina Circuit': {'length_km': 5.554, 'turns': 21, 'elevation': 5, 'drs_zones': 2, 'grip': 7, 'rain_prob': 0.01, 'track_type': 'permanent'},
     }
-    for feature in ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type']:
-        results[feature] = results['circuit'].map(lambda x: track_features.get(x, {}).get(feature, np.nan))
+    for feature in ['length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type', 'overtaking_difficulty']:
+        results[feature] = results['circuit'].map(lambda x: track_features.get(normalize_circuit_name(x), {}).get(feature, np.nan))
 
     # Select and rename features
     results['driver_name'] = results['driver_forename'] + ' ' + results['driver_surname']

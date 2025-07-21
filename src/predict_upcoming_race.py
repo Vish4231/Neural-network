@@ -122,6 +122,35 @@ def standardize_2025_data(historical_df):
     
     return df
 
+circuit_aliases = {
+    'spa-francorchamps': 'circuit de spa-francorchamps',
+    'spa': 'circuit de spa-francorchamps',
+    'silverstone': 'silverstone circuit',
+    'monaco': 'circuit de monaco',
+    'baku': 'baku city circuit',
+    'jeddah': 'jeddah street circuit',
+    'imola': 'imola',
+    'barcelona': 'circuit de barcelona',
+    'montreal': 'circuit gilles villeneuve',
+    'austria': 'red bull ring',
+    'hungary': 'hungaroring',
+    'zandvoort': 'circuit zandvoort',
+    'monza': 'autodromo nazionale di monza',
+    'singapore': 'marina bay street circuit',
+    'suzuka': 'suzuka international racing course',
+    'losail': 'losail international circuit',
+    'cota': 'circuit of the americas',
+    'mexico city': 'autódromo hermanos rodríguez',
+    'interlagos': 'autódromo josé carlos pace',
+    'las vegas': 'las vegas street circuit',
+    'abu dhabi': 'yas marina circuit',
+    # Add more aliases as needed
+}
+
+def normalize_circuit_name(name):
+    norm = name.strip().lower().replace('-', ' ').replace('_', ' ')
+    return circuit_aliases.get(norm, norm)
+
 # --- Feature Generation for Prediction ---
 def create_prediction_df(lineup, year, circuit, combined_df):
     """
@@ -130,16 +159,17 @@ def create_prediction_df(lineup, year, circuit, combined_df):
     """
     # Track-specific mappings (should match feature_engineering.py)
     track_type_map = {
-        'Monaco': 'street', 'Baku': 'street', 'Singapore': 'street', 'Jeddah': 'street',
-        'Silverstone': 'permanent', 'Spa-Francorchamps': 'permanent', 'Monza': 'permanent',
-        'Hungaroring': 'permanent', 'Suzuka': 'permanent', 'Interlagos': 'permanent',
+        'monaco': 'street', 'baku city circuit': 'street', 'singapore': 'street', 'jeddah street circuit': 'street',
+        'silverstone circuit': 'permanent', 'circuit de spa-francorchamps': 'permanent', 'autodromo nazionale di monza': 'permanent',
+        'hungaroring': 'permanent', 'suzuka international racing course': 'permanent', 'interlagos': 'permanent',
     }
     overtaking_map = {
-        'Monaco': 1, 'Baku': 4, 'Singapore': 2, 'Jeddah': 5,
-        'Silverstone': 4, 'Spa-Francorchamps': 5, 'Monza': 5, 'Hungaroring': 2, 'Suzuka': 3, 'Interlagos': 4,
+        'monaco': 1, 'baku city circuit': 4, 'singapore': 2, 'jeddah street circuit': 5,
+        'silverstone circuit': 4, 'circuit de spa-francorchamps': 5, 'autodromo nazionale di monza': 5, 'hungaroring': 2, 'suzuka international racing course': 3, 'interlagos': 4,
     }
-    track_type = track_type_map.get(circuit, 'permanent')
-    overtaking_difficulty = overtaking_map.get(circuit, 3)
+    norm_circuit = normalize_circuit_name(circuit)
+    track_type = track_type_map.get(norm_circuit, 'permanent')
+    overtaking_difficulty = overtaking_map.get(norm_circuit, 3)
 
     pred_rows = []
 
