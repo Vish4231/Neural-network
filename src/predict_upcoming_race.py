@@ -8,6 +8,7 @@ import xgboost as xgb
 import lightgbm as lgb
 import catboost as cb
 from tensorflow import keras
+import sys
 
 # Import the centralized feature engineering function
 from feature_engineering import load_and_engineer_features
@@ -167,39 +168,51 @@ def create_prediction_df(lineup, year, circuit, combined_df):
     return pred_df[features]
 
 # --- Main Prediction Logic ---
-def main():
-    parser = argparse.ArgumentParser(description="Predict F1 race results.")
-    parser.add_argument('--year', type=int, default=2025, help='Year of the race to predict.')
-    parser.add_argument('--circuit', type=str, required=True, help='Circuit name (e.g., spa-francorchamps).')
-    args = parser.parse_args()
-
-    print(f"--- Predicting Top 5 for {args.circuit.title()} {args.year} ---")
-
-    # 1. Load models and preprocessors
-    artifacts = load_prediction_artifacts()
-
-    # 2. Load and combine historical and 2025 data
-    historical_df = load_and_engineer_features()
-    df_2025_std = standardize_2025_data(historical_df)
-    combined_df = pd.concat([historical_df, df_2025_std], ignore_index=True)
-    print(f"Combined historical and 2025 data. Total records: {len(combined_df)}")
-
-    # 3. Get lineup for the upcoming race
+def load_and_combine_data():
     try:
-        if args.year == 2025:
-            lineup = get_2025_lineup(args.circuit)
-        else:
-            # Placeholder for fetching older race lineups if needed
-            raise ValueError(f"Prediction for year {args.year} is not currently supported.")
+        # Load historical data
+        historical_df = load_and_engineer_features()
+        print(f"Loaded historical data. Shape: {historical_df.shape}")
+
+        # Load and standardize 2025 data
+        df_2025_std = standardize_2025_data(historical_df)
+        print(f"Loaded and standardized 2025 data. Shape: {df_2025_std.shape}")
+
+        # Combine the dataframes
+        combined_df = pd.concat([historical_df, df_2025_std], ignore_index=True)
+        print(f"Combined historical and 2025 data. Total records: {len(combined_df)}")
+
+        return combined_df
+    except Exception as e:
+        print(f"Error in load_and_combine_data: {e}")
+        print(f"Error details: {sys.exc_info()[2]}")
+        return None
+
+def main():
+    print("--- Predicting Top 5 for Spa-Francorchamps 2025 ---")
+
+    # Load models and preprocessors
+    artifacts = load_prediction_artifacts()
+    print("All prediction artifacts loaded successfully.")
+
+    # Load and combine data
+    combined_df = load_and_combine_data()
+    if combined_df is None:
+        print("Failed to load and combine data. Exiting.")
+        return
+
+    # Get lineup for the upcoming race
+    try:
+        lineup = get_2025_lineup("spa-francorchamps")
         print(f"\nLoaded lineup for {len(lineup)} drivers.")
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         return
 
-    # 4. Create the feature set for the prediction using the combined data
-    pred_df = create_prediction_df(lineup, args.year, args.circuit, combined_df)
+    # Create the feature set for the prediction using the combined data
+    pred_df = create_prediction_df(lineup, 2025, "spa-francorchamps", combined_df)
     
-    # 5. Preprocess the prediction data
+    # Preprocess the prediction data
     pred_processed = pred_df.copy()
     
     # Define feature lists from the combined dataframe
@@ -209,9 +222,14 @@ def main():
 
     # Impute any missing values that might have occurred
     for col in num_features:
-        pred_processed[col] = pred_processed[col].fillna(historical_df[col].median())
+        pred_processed[col] = pred_processed[col].fillna(combined_df[col].median())
     for col in cat_features:
-        pred_processed[col] = pred_processed[col].fillna(historical_df[col].mode()[0])
+        mode_series = combined_df[col].mode()
+        if not mode_series.empty:
+            mode = mode_series[0]
+        else:
+            mode = "Unknown"
+        pred_processed[col] = pred_processed[col].fillna(mode)
 
     # Encode categorical features
     for col in cat_features:
@@ -224,7 +242,7 @@ def main():
     pred_processed.loc[:, num_features] = artifacts['scaler'].transform(pred_processed[num_features])
     print("Prediction data preprocessed successfully.")
 
-    # 6. Make predictions with all models
+    # Make predictions with all models
     print("\nGenerating predictions from all models...")
     X_pred = pred_processed[features]
     
@@ -233,11 +251,11 @@ def main():
     cat_probs = artifacts['cat_model'].predict_proba(X_pred)[:, 1]
     nn_probs = artifacts['nn_model'].predict(X_pred).flatten()
 
-    # 7. Use the meta-model for the final ensemble prediction
+    # Use the meta-model for the final ensemble prediction
     stack_X = np.vstack([xgb_probs, lgbm_probs, cat_probs, nn_probs]).T
     ensemble_probs = artifacts['meta_model'].predict_proba(stack_X)[:, 1]
 
-    # 8. Display results
+    # Display results
     results_df = lineup.copy()
     results_df['probability'] = ensemble_probs
     results_df = results_df.sort_values('probability', ascending=False).reset_index(drop=True)
