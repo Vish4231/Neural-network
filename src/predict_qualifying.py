@@ -5,6 +5,7 @@ import argparse
 import joblib
 import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from feature_engineering import normalize_circuit_name, track_features
 
 def load_qualifying_data(year, circuit):
     qual_path = 'archive (1)/qualifying.csv'

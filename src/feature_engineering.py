@@ -89,6 +89,8 @@ circuit_aliases = {
     'spa-francorchamps': 'circuit de spa francorchamps',
     'spa francorchamps': 'circuit de spa francorchamps',
     'spa': 'circuit de spa francorchamps',
+    'circuit de spa-francorchamps': 'circuit de spa francorchamps',
+    'circuit de spa francorchamps': 'circuit de spa francorchamps',
     # Yas Marina
     'yas marina': 'yas marina circuit',
     'yas marina circuit': 'yas marina circuit',

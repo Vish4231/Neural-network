@@ -154,54 +154,37 @@ def normalize_circuit_name(name):
 # --- Feature Generation for Prediction ---
 def create_prediction_df(lineup, year, circuit, combined_df):
     print(f"[create_prediction_df] input circuit: '{circuit}'")
-    norm_circuit = normalize_circuit_name(circuit)
-    print(f"[create_prediction_df] normalized circuit: '{norm_circuit}'")
-    track_info = track_features.get(norm_circuit, {})
-    print(f"[create_prediction_df] track_info for '{norm_circuit}': {track_info}\n")
+    canonical_circuit = normalize_circuit_name(circuit)  # This is the canonical key
+    print(f"[create_prediction_df] canonical circuit: '{canonical_circuit}'")
+    track_info = track_features.get(canonical_circuit, {})
+    print(f"[create_prediction_df] track_info for '{canonical_circuit}': {track_info}\n")
 
     pred_rows = []
     for i, driver_info in lineup.iterrows():
         driver_name = driver_info['driver_name']
         team_name = driver_info['team_name']
-        driver_hist = combined_df[combined_df['driver_name'] == driver_name].copy()
-        driver_hist = driver_hist.sort_values('raceId')
-        team_hist = combined_df[combined_df['team_name'] == team_name].copy()
-        team_hist = team_hist.sort_values('raceId')
         row = {
-            'year': year,
-            'circuit': circuit,
             'driver_name': driver_name,
             'team_name': team_name,
-            'grid': driver_info['grid'],
-            'q1': driver_hist['q1'].median(),
-            'q2': driver_hist['q2'].median(),
-            'q3': driver_hist['q3'].median(),
-            'pit_stop_count': driver_hist['pit_stop_count'].median(),
-            'avg_lap_time': driver_hist['avg_lap_time'].median(),
-            'driver_form_last3': driver_hist['positionOrder'].rolling(3, min_periods=1).mean().iloc[-1] if not driver_hist.empty else 10,
-            'driver_form_last5': driver_hist['positionOrder'].rolling(5, min_periods=1).mean().iloc[-1] if not driver_hist.empty else 10,
-            'team_form_last3': team_hist['positionOrder'].rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else 10,
-            'team_form_last5': team_hist['positionOrder'].rolling(5, min_periods=1).mean().iloc[-1] if not team_hist.empty else 10,
-            'grid_vs_qual': 0,
-            'pit_lap_interaction': 0,
+            'circuit': canonical_circuit,
+            # ... other features ...
+            **track_info
         }
-        # Add all differentiating track features
-        for feature in [
-            'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type',
-            'overtaking_difficulty', 'pit_lane_time_loss', 'avg_lap_speed', 'surface_type',
-            'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist']:
-            row[feature] = track_info.get(feature, None)
         pred_rows.append(row)
     pred_df = pd.DataFrame(pred_rows)
-    features = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
-    # Add any new features not in combined_df
-    for feature in [
+
+    # Ensure all required track features are present
+    required_features = [
         'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type',
         'overtaking_difficulty', 'pit_lane_time_loss', 'avg_lap_speed', 'surface_type',
-        'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist']:
-        if feature not in features:
-            features.append(feature)
-    return pred_df[features]
+        'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist'
+    ]
+    for feat in required_features:
+        if feat not in pred_df.columns:
+            pred_df[feat] = np.nan if feat != 'track_type' and feat != 'surface_type' and feat != 'tyre_deg' and feat != 'corner_type_dist' else 'Unknown'
+    print("[DEBUG] Prediction DataFrame (driver, team, circuit, track features):")
+    print(pred_df[['driver_name', 'team_name', 'circuit'] + required_features])
+    return pred_df
 
 # --- Main Prediction Logic ---
 def load_and_combine_data():
