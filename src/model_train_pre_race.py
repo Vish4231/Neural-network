@@ -29,8 +29,8 @@ features = [col for col in df.columns if col not in [target, 'raceId']]
 cat_features = ['team_name', 'driver_name', 'circuit']
 num_features = [f for f in features if f not in cat_features and f != 'year']
 
-# Filter for years 1950-2025
-df = df[(df['year'] >= 1950) & (df['year'] <= 2025)].copy()
+# Filter for years 2018-2025
+df = df[(df['year'] >= 2018) & (df['year'] <= 2025)].copy()
 
 # --- 2. Preprocessing ---
 print("\nStarting preprocessing...")
@@ -44,7 +44,11 @@ for col in num_features:
 # Categorical features with mode
 for col in cat_features:
     if col in df.columns:
-        mode = df[col].mode()[0]
+        mode_series = df[col].mode()
+        if not mode_series.empty:
+            mode = mode_series[0]
+        else:
+            mode = "Unknown"
         df[col] = df[col].fillna(mode)
 
 print("Imputation complete.")

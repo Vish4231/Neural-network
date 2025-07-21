@@ -40,14 +40,27 @@ def load_prediction_artifacts():
 # --- Data Fetching for Upcoming Race ---
 def get_2025_lineup(circuit_name):
     """
-    Loads the 2025 driver lineup and grid positions from the qualifying results file if available,
-    otherwise falls back to the race results file.
+    Loads the 2025 driver lineup and grid positions from the race results file for Silverstone,
+    otherwise uses qualifying results for other circuits if available.
     """
     F1_2025_DATASET_DIR = 'F1_2025_Dataset'
     qual_path = os.path.join(F1_2025_DATASET_DIR, 'F1_2025_QualifyingResults.csv')
     race_results_path = os.path.join(F1_2025_DATASET_DIR, 'F1_2025_RaceResults.csv')
 
-    # Try to load qualifying results for the circuit
+    # For Silverstone, always use race results file
+    if circuit_name.lower() == "silverstone":
+        df = pd.read_csv(race_results_path)
+        race_df = df[df['Track'].str.lower() == circuit_name.lower()].copy()
+        if race_df.empty:
+            raise ValueError(f"No data found for circuit '{circuit_name}' in 2025 dataset.")
+        lineup = race_df[['Driver', 'Team', 'Starting Grid']].rename(columns={
+            'Driver': 'driver_name',
+            'Team': 'team_name',
+            'Starting Grid': 'grid'
+        })
+        return lineup
+
+    # Otherwise, try to load qualifying results for the circuit
     if os.path.exists(qual_path):
         qual_df = pd.read_csv(qual_path)
         qual_circuit = qual_df[qual_df['Track'].str.lower() == circuit_name.lower()]
