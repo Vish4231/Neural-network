@@ -170,6 +170,10 @@ meta_model = LogisticRegression()
 # Impute any NaNs in stack_X_train with column means
 if np.isnan(stack_X_train).any():
     print('Warning: NaNs found in stack_X_train, imputing with column means.')
+    # If any column is all NaN, fill with zeros first
+    for i in range(stack_X_train.shape[1]):
+        if np.isnan(stack_X_train[:, i]).all():
+            stack_X_train[:, i] = 0.0
     col_means = np.nanmean(stack_X_train, axis=0)
     inds = np.where(np.isnan(stack_X_train))
     stack_X_train[inds] = np.take(col_means, inds[1])
