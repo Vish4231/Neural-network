@@ -40,19 +40,34 @@ def load_prediction_artifacts():
 # --- Data Fetching for Upcoming Race ---
 def get_2025_lineup(circuit_name):
     """
-    Loads the 2025 driver lineup and grid positions from local CSV files.
-    This is the primary method for 2025 predictions.
+    Loads the 2025 driver lineup and grid positions from the qualifying results file if available,
+    otherwise falls back to the race results file.
     """
+    F1_2025_DATASET_DIR = 'F1_2025_Dataset'
+    qual_path = os.path.join(F1_2025_DATASET_DIR, 'F1_2025_QualifyingResults.csv')
     race_results_path = os.path.join(F1_2025_DATASET_DIR, 'F1_2025_RaceResults.csv')
-    if not os.path.exists(race_results_path):
-        raise FileNotFoundError(f"Required 2025 data file not found: {race_results_path}")
 
+    # Try to load qualifying results for the circuit
+    if os.path.exists(qual_path):
+        qual_df = pd.read_csv(qual_path)
+        qual_circuit = qual_df[qual_df['Track'].str.lower() == circuit_name.lower()]
+        # Only use numeric positions
+        qual_circuit = qual_circuit[pd.to_numeric(qual_circuit['Position'], errors='coerce').notnull()]
+        if not qual_circuit.empty:
+            qual_circuit['Position'] = qual_circuit['Position'].astype(int)
+            qual_circuit = qual_circuit.sort_values('Position')
+            lineup = qual_circuit[['Driver', 'Team', 'Position']].rename(columns={
+                'Driver': 'driver_name',
+                'Team': 'team_name',
+                'Position': 'grid'
+            })
+            return lineup
+
+    # Fallback: use race results file
     df = pd.read_csv(race_results_path)
     race_df = df[df['Track'].str.lower() == circuit_name.lower()].copy()
-
     if race_df.empty:
         raise ValueError(f"No data found for circuit '{circuit_name}' in 2025 dataset.")
-
     lineup = race_df[['Driver', 'Team', 'Starting Grid']].rename(columns={
         'Driver': 'driver_name',
         'Team': 'team_name',

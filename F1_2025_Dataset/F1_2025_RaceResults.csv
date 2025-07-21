@@ -178,7 +178,6 @@ Spain,16,31,Esteban Ocon,Haas Ferrari,16,66,+32.197,0,No,1:18.624
 Spain,17,87,Oliver Bearman,Haas Ferrari,14,66,+37.065,0,No,1:18.907
 Spain,NC,12,Kimi Antonelli,Mercedes,6,53,DNF,0,No,1:18.255
 Spain,NC,23,Alexander Albon,Williams Mercedes,11,27,DNF,0,No,1:20.508
-
 Belgium,1,4,Lando Norris,McLaren Mercedes,1,44,1:25:00.000,25,Yes,1:45.000
 Belgium,2,1,Max Verstappen,Red Bull Racing Honda RBPT,2,44,+1.000,18,No,1:45.000
 Belgium,3,63,George Russell,Mercedes,3,44,+2.000,15,No,1:45.000
@@ -199,24 +198,23 @@ Belgium,17,14,Fernando Alonso,Aston Martin Aramco Mercedes,17,44,+16.000,0,No,1:
 Belgium,18,55,Carlos Sainz,Williams Mercedes,18,44,+17.000,0,No,1:45.000
 Belgium,19,7,Jack Doohan,Alpine Renault,19,44,+18.000,0,No,1:45.000
 Belgium,20,6,Isack Hadjar,Racing Bulls Honda RBPT,20,44,+19.000,0,No,1:45.000
-
-Spa-Francorchamps,1,4,Lando Norris,McLaren Mercedes,1,0,,0,No,
+Spa-Francorchamps,1,4,Lando Norris,McLaren Mercedes,3,0,,0,No,
 Spa-Francorchamps,2,1,Max Verstappen,Red Bull Racing Honda RBPT,2,0,,0,No,
-Spa-Francorchamps,3,63,George Russell,Mercedes,3,0,,0,No,
-Spa-Francorchamps,4,12,Kimi Antonelli,Mercedes,4,0,,0,No,
-Spa-Francorchamps,5,23,Alexander Albon,Williams Mercedes,5,0,,0,No,
-Spa-Francorchamps,6,18,Lance Stroll,Aston Martin Aramco Mercedes,6,0,,0,No,
-Spa-Francorchamps,7,27,Nico Hulkenberg,Kick Sauber Ferrari,7,0,,0,No,
-Spa-Francorchamps,8,16,Charles Leclerc,Ferrari,8,0,,0,No,
-Spa-Francorchamps,9,81,Oscar Piastri,McLaren Mercedes,9,0,,0,No,
-Spa-Francorchamps,10,44,Lewis Hamilton,Ferrari,10,0,,0,No,
-Spa-Francorchamps,11,10,Pierre Gasly,Alpine Renault,11,0,,0,No,
-Spa-Francorchamps,12,22,Yuki Tsunoda,Racing Bulls Honda RBPT,12,0,,0,No,
-Spa-Francorchamps,13,31,Esteban Ocon,Haas Ferrari,13,0,,0,No,
-Spa-Francorchamps,14,87,Oliver Bearman,Haas Ferrari,14,0,,0,No,
+Spa-Francorchamps,3,63,George Russell,Mercedes,4,0,,0,No,
+Spa-Francorchamps,4,12,Kimi Antonelli,Mercedes,7,0,,0,No,
+Spa-Francorchamps,5,23,Alexander Albon,Williams Mercedes,8,0,,0,No,
+Spa-Francorchamps,6,18,Lance Stroll,Aston Martin Aramco Mercedes,18,0,,0,No,
+Spa-Francorchamps,7,27,Nico Hulkenberg,Kick Sauber Ferrari,17,0,,0,No,
+Spa-Francorchamps,8,16,Charles Leclerc,Ferrari,5,0,,0,No,
+Spa-Francorchamps,9,81,Oscar Piastri,McLaren Mercedes,1,0,,0,No,
+Spa-Francorchamps,10,44,Lewis Hamilton,Ferrari,6,0,,0,No,
+Spa-Francorchamps,11,10,Pierre Gasly,Alpine Renault,13,0,,0,No,
+Spa-Francorchamps,12,22,Yuki Tsunoda,Racing Bulls Honda RBPT,11,0,,0,No,
+Spa-Francorchamps,13,31,Esteban Ocon,Haas Ferrari,14,0,,0,No,
+Spa-Francorchamps,14,87,Oliver Bearman,Haas Ferrari,20,0,,0,No,
 Spa-Francorchamps,15,30,Liam Lawson,Red Bull Racing Honda RBPT,15,0,,0,No,
-Spa-Francorchamps,16,5,Gabriel Bortoleto,Kick Sauber Ferrari,16,0,,0,No,
-Spa-Francorchamps,17,14,Fernando Alonso,Aston Martin Aramco Mercedes,17,0,,0,No,
-Spa-Francorchamps,18,55,Carlos Sainz,Williams Mercedes,18,0,,0,No,
-Spa-Francorchamps,19,7,Jack Doohan,Alpine Renault,19,0,,0,No,
-Spa-Francorchamps,20,6,Isack Hadjar,Racing Bulls Honda RBPT,20,0,,0,No,
+Spa-Francorchamps,16,5,Gabriel Bortoleto,Kick Sauber Ferrari,19,0,,0,No,
+Spa-Francorchamps,17,14,Fernando Alonso,Aston Martin Aramco Mercedes,12,0,,0,No,
+Spa-Francorchamps,18,55,Carlos Sainz,Williams Mercedes,10,0,,0,No,
+Spa-Francorchamps,19,7,Jack Doohan,Alpine Renault,16,0,,0,No,
+Spa-Francorchamps,20,6,Isack Hadjar,Racing Bulls Honda RBPT,9,0,,0,No,
