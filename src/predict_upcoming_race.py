@@ -226,7 +226,11 @@ def main():
 
     # Create the feature set for the prediction using the combined data
     pred_df = create_prediction_df(lineup, 2025, "spa-francorchamps", combined_df)
-    
+
+    # Print prediction features for debugging
+    print("\nPrediction features for this race:")
+    print(pred_df)
+
     # Preprocess the prediction data
     pred_processed = pred_df.copy()
     
