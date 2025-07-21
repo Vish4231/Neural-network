@@ -30,7 +30,18 @@ cat_features = ['team_name', 'driver_name', 'circuit', 'track_type']
 num_features = [f for f in features if f not in cat_features and f != 'year']
 
 # Filter for years 2015-2025
+print("Filtering data for years 2015-2025...")
 df = df[(df['year'] >= 2015) & (df['year'] <= 2025)].copy()
+
+# Print unique values for all track features to confirm they are present and dynamic
+track_feature_cols = [
+    'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type',
+    'overtaking_difficulty', 'pit_lane_time_loss', 'avg_lap_speed', 'surface_type',
+    'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist'
+]
+for col in track_feature_cols:
+    if col in df.columns:
+        print(f"Unique values for {col}: {df[col].unique()}")
 
 # --- 2. Preprocessing ---
 print("\nStarting preprocessing...")
