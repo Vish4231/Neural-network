@@ -80,6 +80,31 @@ print("\nStarting model training...")
 X = df[features]
 y = (df[target] <= 5).astype(int)  # Top 5 classification
 
+# Final robust NaN imputation for all features
+print(f"NaNs in X before final imputation: {X.isna().sum().sum()}")
+for col in X.select_dtypes(include=[np.number]).columns:
+    X[col] = X[col].fillna(X[col].median())
+for col in X.select_dtypes(include=['object']).columns:
+    mode = X[col].mode()[0] if not X[col].mode().empty else 'Unknown'
+    X[col] = X[col].fillna(mode)
+print("NaNs per column after median/mode imputation:")
+print(X.isna().sum())
+# Fill any remaining NaNs with 0 (numeric) or 'Unknown' (categorical)
+for col in X.columns:
+    if X[col].isna().any():
+        if X[col].dtype.kind in 'biufc':
+            X[col] = X[col].fillna(0)
+        else:
+            X[col] = X[col].fillna('Unknown')
+print("NaNs per column after final fill:")
+print(X.isna().sum())
+# Optionally, drop columns that are all NaN (should be none after above)
+all_nan_cols = X.columns[X.isna().all()]
+if len(all_nan_cols) > 0:
+    print(f"Dropping columns that are all NaN: {list(all_nan_cols)}")
+    X = X.drop(columns=all_nan_cols)
+
+
 # Ensure target has both classes
 if y.nunique() < 2:
     print('ERROR: Only one class present in target variable. Check data filtering.')
