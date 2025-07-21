@@ -166,6 +166,14 @@ stack_X_train = np.vstack([xgb_probs_train, lgbm_probs_train, cat_probs_train, n
 
 # Train the meta-model
 meta_model = LogisticRegression()
+
+# Impute any NaNs in stack_X_train with column means
+if np.isnan(stack_X_train).any():
+    print('Warning: NaNs found in stack_X_train, imputing with column means.')
+    col_means = np.nanmean(stack_X_train, axis=0)
+    inds = np.where(np.isnan(stack_X_train))
+    stack_X_train[inds] = np.take(col_means, inds[1])
+
 meta_model.fit(stack_X_train, y_train)
 meta_pred = meta_model.predict(stack_X_test)
 print("Stacking Meta-Model Test accuracy:", accuracy_score(y_test, meta_pred))
