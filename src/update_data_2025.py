@@ -1,309 +1,154 @@
-#!/usr/bin/env python3
-"""
-Update F1 Dataset with 2024 and 2025 data
-"""
-
-import requests
 import pandas as pd
 import os
+import argparse
+import fastf1
+from fastf1.ergast import Ergast
 from datetime import datetime
-import time
 
-def fetch_all_years_data():
-    """Fetch comprehensive data for all years including 2024 and 2025"""
+def fetch_and_append_new_results(year=2025):
+    """
+    Fetches the latest completed race results for a given year from the Ergast API,
+    standardizes them, and appends them to the historical races and results files.
+    """
+    print(f"--- Starting Live Data Update for {year} ---")
+
+    # --- Configuration ---
+    ARCHIVE_PATH = 'archive (1)/'
     
-    print("Fetching comprehensive F1 data for 2018-2025...")
+    # --- Load Existing Data ---
+    try:
+        races_df = pd.read_csv(os.path.join(ARCHIVE_PATH, 'races.csv'))
+        results_df = pd.read_csv(os.path.join(ARCHIVE_PATH, 'results.csv'))
+        drivers_df = pd.read_csv(os.path.join(ARCHIVE_PATH, 'drivers.csv'))
+        constructors_df = pd.read_csv(os.path.join(ARCHIVE_PATH, 'constructors.csv'))
+        circuits_df = pd.read_csv(os.path.join(ARCHIVE_PATH, 'circuits.csv'))
+        print("Loaded all historical data files.")
+    except FileNotFoundError as e:
+        print(f"Error: Could not find a required data file: {e}")
+        return
+
+    # --- Fetch New Data ---
+    ergast = Ergast()
     
-    all_data = []
+    # 1. Fetch the schedule for the target year using fastf1
+    print(f"Fetching race schedule for {year}...")
+    try:
+        fastf1.Cache.enable_cache(os.path.join(os.getcwd(), 'cache'))
+        season_schedule = fastf1.get_event_schedule(year, include_testing=False)
+    except Exception as e:
+        print(f"Could not fetch event schedule for {year}: {e}")
+        return
     
-    # Years to fetch
-    years = list(range(2018, 2026))  # 2018-2025
+    if season_schedule.empty:
+        print(f"No race schedule found for {year}.")
+        return
+
+    # Create a mapping from circuit name to circuitId for later use
+    circuit_name_to_id = circuits_df.set_index('name')['circuitId']
     
-    for year in years:
-        print(f"\nProcessing year {year}...")
-        
-        # Get all race sessions for this year
-        sessions_url = f"https://api.openf1.org/v1/sessions?year={year}&session_type=Race"
-        sessions_resp = requests.get(sessions_url)
-        
-        if sessions_resp.status_code != 200:
-            print(f"  No sessions found for {year}")
+    existing_races_in_year = races_df[races_df['year'] == year]
+    new_results_to_append = []
+    new_races_to_append = []
+
+    # 2. Iterate through each race in the schedule
+    for _, event in season_schedule.iterrows():
+        race_name = event['EventName']
+        race_date = event['EventDate']
+
+        # 3. Check if the race has happened and is not already in our data
+        if race_date > pd.Timestamp.now(tz='UTC') or race_name in existing_races_in_year['name'].values:
+            if race_date <= pd.Timestamp.now(tz='UTC'):
+                print(f"Skipping '{race_name}' (already in dataset).")
             continue
-            
-        sessions = sessions_resp.json()
-        print(f"  Found {len(sessions)} race sessions")
-        
-        year_data = []
-        
-        for session in sessions:
-            session_key = session['session_key']
-            meeting_key = session['meeting_key']
-            circuit = session.get('circuit_short_name', 'Unknown')
-            country = session.get('country_name', 'Unknown')
-            
-            # Get starting grid
-            grid_url = f"https://api.openf1.org/v1/starting_grid?session_key={session_key}"
-            grid_resp = requests.get(grid_url)
-            
-            if grid_resp.status_code != 200:
-                continue
-                
-            grid_data = grid_resp.json()
-            
-            # Get session results
-            results_url = f"https://api.openf1.org/v1/session_result?session_key={session_key}"
-            results_resp = requests.get(results_url)
-            
-            if results_resp.status_code != 200:
-                continue
-                
-            results_data = results_resp.json()
-            
-            # Create position mapping
-            position_map = {}
-            for result in results_data:
-                position_map[result['driver_number']] = result['position']
-            
-            # Get driver info
-            drivers_url = f"https://api.openf1.org/v1/drivers?session_key={session_key}"
-            drivers_resp = requests.get(drivers_url)
-            
-            driver_map = {}
-            if drivers_resp.status_code == 200:
-                drivers_data = drivers_resp.json()
-                for driver in drivers_data:
-                    driver_map[driver['driver_number']] = driver
-            
-            # Get weather data
-            weather_url = f"https://api.openf1.org/v1/weather?session_key={session_key}"
-            weather_resp = requests.get(weather_url)
-            
-            weather_data = None
-            if weather_resp.status_code == 200:
-                weather_raw = weather_resp.json()
-                if weather_raw:
-                    weather_df = pd.DataFrame(weather_raw)
-                    weather_data = {
-                        'air_temperature': weather_df['air_temperature'].mean() if 'air_temperature' in weather_df else None,
-                        'humidity': weather_df['humidity'].mean() if 'humidity' in weather_df else None,
-                        'rainfall': weather_df['rainfall'].mean() if 'rainfall' in weather_df else None,
-                        'track_temperature': weather_df['track_temperature'].mean() if 'track_temperature' in weather_df else None,
-                        'wind_speed': weather_df['wind_speed'].mean() if 'wind_speed' in weather_df else None,
-                    }
-            
-            # Process each grid position
-            for grid_entry in grid_data:
-                driver_number = grid_entry['driver_number']
-                
-                # Get driver info
-                driver_info = driver_map.get(driver_number, {})
-                
-                # Create data row
-                row = {
-                    'year': year,
-                    'circuit': circuit,
-                    'country': country,
-                    'driver_number': driver_number,
-                    'grid_position': grid_entry['position'],
-                    'qualifying_lap_time': grid_entry.get('lap_duration', None),
-                    'finishing_position': position_map.get(driver_number, None),
-                    'team_name': driver_info.get('team_name', None),
-                    'driver_name': driver_info.get('full_name', None),
-                    'country_code': driver_info.get('country_code', None),
-                }
-                
-                # Add weather data
-                if weather_data:
-                    row.update(weather_data)
-                
-                year_data.append(row)
-                
-            time.sleep(0.1)  # Rate limiting
-            
-        all_data.extend(year_data)
-        print(f"  Collected {len(year_data)} data points for {year}")
-        
-        # Short pause between years
-        time.sleep(0.5)
-    
-    # Convert to DataFrame
-    df = pd.DataFrame(all_data)
-    
-    # --- INTEGRATE 2025 MANUAL RESULTS CSV ---
-    csv_2025_path = os.path.join('data', 'F1_2025_RaceResults.csv')
-    if os.path.exists(csv_2025_path):
-        print(f"\nIntegrating manual 2025 results from {csv_2025_path}...")
-        df_2025 = pd.read_csv(csv_2025_path)
-        # Harmonize columns
-        df_2025_harmonized = pd.DataFrame({
-            'year': 2025,
-            'circuit': df_2025['Track'],
-            'country': None,  # Not available in CSV
-            'driver_number': df_2025['No'],
-            'grid_position': pd.to_numeric(df_2025['Starting Grid'], errors='coerce'),
-            'qualifying_lap_time': None,  # Not available in CSV
-            'finishing_position': df_2025['Position'].apply(lambda x: int(x) if str(x).isdigit() else None),
-            'team_name': df_2025['Team'],
-            'driver_name': df_2025['Driver'],
-            'country_code': None,  # Not available in CSV
-            'air_temperature': None,
-            'humidity': None,
-            'rainfall': None,
-            'track_temperature': None,
-            'wind_speed': None,
-        })
-        # Remove rows without essential data
-        df_2025_harmonized = df_2025_harmonized.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
-        # Convert finishing_position to int and filter valid positions
-        def is_valid_position(pos):
-            try:
-                int_pos = int(pos)
-                return 1 <= int_pos <= 25
-            except:
-                return False
-        df_2025_harmonized = df_2025_harmonized[df_2025_harmonized['finishing_position'].apply(is_valid_position)]
-        df_2025_harmonized['finishing_position'] = df_2025_harmonized['finishing_position'].astype(int)
-        df_2025_harmonized['finishing_position_int'] = df_2025_harmonized['finishing_position']
-        # Append to main df
-        df = pd.concat([df, df_2025_harmonized], ignore_index=True, sort=False)
-        print(f"Integrated {len(df_2025_harmonized)} 2025 results from CSV.")
-    else:
-        print("No manual 2025 results CSV found.")
-    
-    # Filter out rows without essential data
-    df = df.dropna(subset=['finishing_position', 'grid_position', 'team_name'])
-    
-    # Convert finishing_position to int and filter valid positions
-    def is_valid_position(pos):
-        try:
-            int_pos = int(pos)
-            return 1 <= int_pos <= 25  # Valid F1 positions
-        except:
-            return False
-    
-    df = df[df['finishing_position'].apply(is_valid_position)]
-    df['finishing_position'] = df['finishing_position'].astype(int)
-    df['finishing_position_int'] = df['finishing_position']
-    
-    # Sort by driver and year/circuit for form calculations
-    df = df.sort_values(['driver_number', 'year', 'circuit'])
-    
-    # Calculate driver form (average finish in last 3 races)
-    df['driver_form_last3'] = (
-        df.groupby('driver_number')['finishing_position_int']
-        .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
-    )
-    
-    # Calculate team form (average finish in last 3 races)
-    df['team_form_last3'] = (
-        df.groupby('team_name')['finishing_position_int']
-        .transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
-    )
-    
-    # Add qualifying gap to pole
-    df['qualifying_gap_to_pole'] = None
-    for (year, circuit), group in df.groupby(['year', 'circuit']):
-        if 'qualifying_lap_time' in group.columns and not group['qualifying_lap_time'].isna().all():
-            try:
-                pole_time = group['qualifying_lap_time'].min()
-                mask = (df['year'] == year) & (df['circuit'] == circuit)
-                df.loc[mask, 'qualifying_gap_to_pole'] = df.loc[mask, 'qualifying_lap_time'] - pole_time
-            except:
-                pass
-    
-    # Add teammate grid delta
-    df['teammate_grid_delta'] = None
-    for (year, circuit, team), group in df.groupby(['year', 'circuit', 'team_name']):
-        if len(group) == 2:  # Teams have 2 drivers
-            drivers = group.sort_values('grid_position')
-            if len(drivers) == 2:
-                driver1_idx = drivers.index[0]
-                driver2_idx = drivers.index[1]
-                
-                grid1 = drivers.iloc[0]['grid_position']
-                grid2 = drivers.iloc[1]['grid_position']
-                
-                df.at[driver1_idx, 'teammate_grid_delta'] = grid1 - grid2
-                df.at[driver2_idx, 'teammate_grid_delta'] = grid2 - grid1
-    
-    # Add static circuit characteristics
-    circuit_characteristics = {
-        'Baku': {'track_type': 'street', 'overtaking_difficulty': 4},
-        'Jeddah': {'track_type': 'street', 'overtaking_difficulty': 5},
-        'Melbourne': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Sakhir': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Miami': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Imola': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Monte Carlo': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Catalunya': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Montreal': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Spielberg': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Silverstone': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Hungaroring': {'track_type': 'permanent', 'overtaking_difficulty': 4},
-        'Spa': {'track_type': 'permanent', 'overtaking_difficulty': 2},
-        'Zandvoort': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Monza': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Singapore': {'track_type': 'street', 'overtaking_difficulty': 2},
-        'Suzuka': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Lusail': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Austin': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Mexico City': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Interlagos': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Las Vegas': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Yas Marina': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-        'Shanghai': {'track_type': 'permanent', 'overtaking_difficulty': 3},
-    }
-    
-    df['track_type'] = df['circuit'].map(lambda x: circuit_characteristics.get(x, {}).get('track_type', 'permanent'))
-    df['overtaking_difficulty'] = df['circuit'].map(lambda x: circuit_characteristics.get(x, {}).get('overtaking_difficulty', 3))
-    
-    # Add placeholder championship data
-    df['driver_championship_position'] = None
-    df['team_championship_position'] = None
-    df['driver_points_season'] = None
-    df['team_points_season'] = None
-    df['weather_rain_forecast'] = None
-    
-    print(f"\nFinal dataset:")
-    print(f"Total rows: {len(df)}")
-    print(f"Years: {sorted(df['year'].unique())}")
-    print(f"Circuits: {len(df['circuit'].unique())}")
-    
-    # Show year breakdown
-    for year in sorted(df['year'].unique()):
-        year_count = len(df[df['year'] == year])
-        print(f"  {year}: {year_count} data points")
-    
-    return df
 
-def main():
-    """Main function"""
-    print("F1 Data Update Tool - Adding 2024 and 2025 support")
-    print("=" * 50)
+        print(f"Found new completed race: '{race_name}'. Fetching results...")
+        
+        # 4. Fetch results for this specific race using Ergast
+        race_results_data = ergast.get_race_results(season=year, round=event['RoundNumber'])
+        if not race_results_data.content:
+            print(f"No results found for '{race_name}'. Skipping.")
+            continue
+        
+        race_result_df = race_results_data.content[0]
+
+        # 5. Add the new race to our list of races to be added
+        last_race_id = races_df['raceId'].max() if not new_races_to_append else max(r['raceId'] for r in new_races_to_append)
+        new_race_id = last_race_id + 1
+        
+        circuit_id = circuit_name_to_id.get(event['Location']) # Match on location name
+
+        new_races_to_append.append({
+            'raceId': new_race_id,
+            'year': year,
+            'round': event['RoundNumber'],
+            'circuitId': circuit_id,
+            'name': race_name,
+            'date': race_date.strftime('%Y-%m-%d'),
+        })
+
+        # 6. Process the results for this new race
+        for _, row in race_result_df.iterrows():
+            try:
+                driver_id = drivers_df.loc[drivers_df['driverRef'] == row['driverId'], 'driverId'].iloc[0]
+                constructor_id = constructors_df.loc[constructors_df['constructorRef'] == row['constructorId'], 'constructorId'].iloc[0]
+            except IndexError:
+                print(f"Warning: Could not map driver '{row['driverId']}' or constructor '{row['constructorId']}'. Skipping row.")
+                continue
+
+            new_results_to_append.append({
+                'resultId': None,
+                'raceId': new_race_id,
+                'driverId': driver_id,
+                'constructorId': constructor_id,
+                'number': row['number'],
+                'grid': row['grid'],
+                'position': row.get('position', None),
+                'positionText': str(row.get('positionText', '')),
+                'positionOrder': row['position'],
+                'points': row['points'],
+                'laps': row['laps'],
+                'time': row.get('time', None),
+                'milliseconds': row.get('milliseconds', None),
+                'fastestLap': row.get('fastestLap', None),
+                'rank': row.get('rank', None),
+                'fastestLapTime': row.get('fastestLapTime', None),
+                'fastestLapSpeed': row.get('fastestLapSpeed', None),
+                'statusId': 1 # Simplified status
+            })
+
+    # --- Append New Data if any was found ---
+    if not new_results_to_append:
+        print("No new, unprocessed race results found.")
+        return
+
+    # Append races
+    new_races_df = pd.DataFrame(new_races_to_append)
+    updated_races = pd.concat([races_df, new_races_df], ignore_index=True)
     
-    # Create data directory
-    os.makedirs('data', exist_ok=True)
+    # Append results
+    new_results_df = pd.DataFrame(new_results_to_append)
+    last_result_id = results_df['resultId'].max()
+    new_results_df['resultId'] = range(last_result_id + 1, last_result_id + 1 + len(new_results_df))
+    updated_results = pd.concat([results_df, new_results_df], ignore_index=True)
+
+    # --- Save Updated Files ---
+    races_path = os.path.join(ARCHIVE_PATH, 'races.csv')
+    results_path = os.path.join(ARCHIVE_PATH, 'results.csv')
+
+    # Backup and save
+    os.rename(races_path, races_path + '.bak')
+    os.rename(results_path, results_path + '.bak')
+    print("Created backups of original races and results files.")
+
+    updated_races.to_csv(races_path, index=False)
+    updated_results.to_csv(results_path, index=False)
     
-    # Fetch all data
-    df = fetch_all_years_data()
-    
-    # Save to CSV
-    output_path = 'data/pre_race_features.csv'
-    df.to_csv(output_path, index=False)
-    
-    print(f"\nData saved to {output_path}")
-    print(f"Dataset now includes {len(df)} race entries")
-    
-    # Check for 2025 data specifically
-    df_2025 = df[df['year'] == 2025]
-    if len(df_2025) > 0:
-        print(f"\n2025 data available: {len(df_2025)} entries")
-        print("2025 circuits:", df_2025['circuit'].unique().tolist())
-    else:
-        print("\n2025 data: Not yet available (season hasn't started)")
-        print("The system is ready to incorporate 2025 data when it becomes available")
-    
-    print("\nData collection complete!")
+    print(f"Successfully added {len(new_races_df)} new races and {len(new_results_df)} results.")
+    print("--- Live Data Update Complete ---")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Update historical F1 data with the latest season results from a live API.")
+    parser.add_argument('--year', type=int, default=datetime.now().year, help='The year to fetch data for.')
+    args = parser.parse_args()
+    
+    fetch_and_append_new_results(year=args.year)
