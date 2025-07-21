@@ -153,10 +153,11 @@ def normalize_circuit_name(name):
 
 # --- Feature Generation for Prediction ---
 def create_prediction_df(lineup, year, circuit, combined_df):
+    print(f"[create_prediction_df] input circuit: '{circuit}'")
     norm_circuit = normalize_circuit_name(circuit)
+    print(f"[create_prediction_df] normalized circuit: '{norm_circuit}'")
     track_info = track_features.get(norm_circuit, {})
-    track_type = track_info.get('track_type', 'permanent')
-    overtaking_difficulty = track_info.get('overtaking_difficulty', 3)
+    print(f"[create_prediction_df] track_info for '{norm_circuit}': {track_info}\n")
 
     pred_rows = []
     for i, driver_info in lineup.iterrows():
@@ -183,12 +184,23 @@ def create_prediction_df(lineup, year, circuit, combined_df):
             'team_form_last5': team_hist['positionOrder'].rolling(5, min_periods=1).mean().iloc[-1] if not team_hist.empty else 10,
             'grid_vs_qual': 0,
             'pit_lap_interaction': 0,
-            'track_type': track_type,
-            'overtaking_difficulty': overtaking_difficulty
         }
+        # Add all differentiating track features
+        for feature in [
+            'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type',
+            'overtaking_difficulty', 'pit_lane_time_loss', 'avg_lap_speed', 'surface_type',
+            'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist']:
+            row[feature] = track_info.get(feature, None)
         pred_rows.append(row)
     pred_df = pd.DataFrame(pred_rows)
     features = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
+    # Add any new features not in combined_df
+    for feature in [
+        'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob', 'track_type',
+        'overtaking_difficulty', 'pit_lane_time_loss', 'avg_lap_speed', 'surface_type',
+        'track_width', 'safety_car_prob', 'tyre_deg', 'corner_type_dist']:
+        if feature not in features:
+            features.append(feature)
     return pred_df[features]
 
 # --- Main Prediction Logic ---
