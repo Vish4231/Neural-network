@@ -75,6 +75,21 @@ def load_and_engineer_features():
     results['grid_vs_qual'] = results['grid'] - results['position_qual']
     results['pit_lap_interaction'] = results['pit_stop_count'] * results['avg_lap_time']
 
+    # Add track-specific features
+    track_type_map = {
+        'Monaco': 'street', 'Baku': 'street', 'Singapore': 'street', 'Jeddah': 'street',
+        'Silverstone': 'permanent', 'Spa-Francorchamps': 'permanent', 'Monza': 'permanent',
+        'Hungaroring': 'permanent', 'Suzuka': 'permanent', 'Interlagos': 'permanent',
+        # Add more circuits as needed
+    }
+    overtaking_map = {
+        'Monaco': 1, 'Baku': 4, 'Singapore': 2, 'Jeddah': 5,
+        'Silverstone': 4, 'Spa-Francorchamps': 5, 'Monza': 5, 'Hungaroring': 2, 'Suzuka': 3, 'Interlagos': 4,
+        # Add more circuits as needed
+    }
+    results['track_type'] = results['circuit'].map(track_type_map).fillna('permanent')
+    results['overtaking_difficulty'] = results['circuit'].map(overtaking_map).fillna(3)
+
     # Select and rename features
     results['driver_name'] = results['driver_forename'] + ' ' + results['driver_surname']
     
@@ -82,7 +97,7 @@ def load_and_engineer_features():
         'raceId', 'year', 'circuit', 'driver_name', 'team_name',
         'grid', 'q1', 'q2', 'q3', 'pit_stop_count', 'avg_lap_time',
         'driver_form_last3', 'driver_form_last5', 'team_form_last3', 'team_form_last5',
-        'grid_vs_qual', 'pit_lap_interaction', 'positionOrder'
+        'grid_vs_qual', 'pit_lap_interaction', 'track_type', 'overtaking_difficulty', 'positionOrder'
     ]
     
     final_df = results[features].copy()

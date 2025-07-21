@@ -128,6 +128,19 @@ def create_prediction_df(lineup, year, circuit, combined_df):
     Creates a feature DataFrame for an upcoming race by calculating
     rolling features from the combined historical and current season data.
     """
+    # Track-specific mappings (should match feature_engineering.py)
+    track_type_map = {
+        'Monaco': 'street', 'Baku': 'street', 'Singapore': 'street', 'Jeddah': 'street',
+        'Silverstone': 'permanent', 'Spa-Francorchamps': 'permanent', 'Monza': 'permanent',
+        'Hungaroring': 'permanent', 'Suzuka': 'permanent', 'Interlagos': 'permanent',
+    }
+    overtaking_map = {
+        'Monaco': 1, 'Baku': 4, 'Singapore': 2, 'Jeddah': 5,
+        'Silverstone': 4, 'Spa-Francorchamps': 5, 'Monza': 5, 'Hungaroring': 2, 'Suzuka': 3, 'Interlagos': 4,
+    }
+    track_type = track_type_map.get(circuit, 'permanent')
+    overtaking_difficulty = overtaking_map.get(circuit, 3)
+
     pred_rows = []
 
     for i, driver_info in lineup.iterrows():
@@ -158,7 +171,9 @@ def create_prediction_df(lineup, year, circuit, combined_df):
             'team_form_last3': team_hist['positionOrder'].rolling(3, min_periods=1).mean().iloc[-1] if not team_hist.empty else 10,
             'team_form_last5': team_hist['positionOrder'].rolling(5, min_periods=1).mean().iloc[-1] if not team_hist.empty else 10,
             'grid_vs_qual': 0,
-            'pit_lap_interaction': 0
+            'pit_lap_interaction': 0,
+            'track_type': track_type,
+            'overtaking_difficulty': overtaking_difficulty
         }
         pred_rows.append(row)
 
@@ -217,19 +232,21 @@ def main():
     
     # Define feature lists from the combined dataframe
     features = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
-    cat_features = ['team_name', 'driver_name', 'circuit']
+    cat_features = ['team_name', 'driver_name', 'circuit', 'track_type']
     num_features = [f for f in features if f not in cat_features and f != 'year']
 
     # Impute any missing values that might have occurred
     for col in num_features:
-        pred_processed[col] = pred_processed[col].fillna(combined_df[col].median())
+        if col in pred_processed.columns:
+            pred_processed[col] = pred_processed[col].fillna(combined_df[col].median())
     for col in cat_features:
-        mode_series = combined_df[col].mode()
-        if not mode_series.empty:
-            mode = mode_series[0]
-        else:
-            mode = "Unknown"
-        pred_processed[col] = pred_processed[col].fillna(mode)
+        if col in pred_processed.columns:
+            mode_series = combined_df[col].mode()
+            if not mode_series.empty:
+                mode = mode_series[0]
+            else:
+                mode = "Unknown"
+            pred_processed[col] = pred_processed[col].fillna(mode)
 
     # Encode categorical features
     for col in cat_features:

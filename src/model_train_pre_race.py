@@ -26,7 +26,7 @@ print("Features loaded successfully.")
 # Define features and target
 target = 'positionOrder'
 features = [col for col in df.columns if col not in [target, 'raceId']]
-cat_features = ['team_name', 'driver_name', 'circuit']
+cat_features = ['team_name', 'driver_name', 'circuit', 'track_type']
 num_features = [f for f in features if f not in cat_features and f != 'year']
 
 # Filter for years 2018-2025
