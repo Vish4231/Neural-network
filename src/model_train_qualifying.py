@@ -6,6 +6,9 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import mean_absolute_error, accuracy_score, classification_report
 import xgboost as xgb
 import joblib
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from feature_engineering import engineer_f1db_features, track_features
 
 # Load qualifying data
 qual_path = 'archive (1)/qualifying.csv'
@@ -93,4 +96,33 @@ if acc > (1 - mae / X_test.shape[0]):
     print("Saved classification model (top 5) as best.")
 else:
     joblib.dump(xgb_reg, 'model/xgb_qualifying_regression.model')
-    print("Saved regression model (position) as best.") 
+    print("Saved regression model (position) as best.")
+
+def train_qualifying_model():
+    df = pd.read_csv('data/f1db_merged_2010_2025.csv')
+    df = engineer_f1db_features(df, track_features)
+    # Select features and target
+    features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+    cat_features = ['driverId', 'constructorId']
+    X = df[features + cat_features].fillna(0)
+    y = df['grid'].fillna(df['positionOrder'])  # Use grid if available, else positionOrder
+    # Encode categorical features
+    encoders = {}
+    for col in cat_features:
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col].astype(str))
+        encoders[col] = le
+    # Scale numerical features
+    scaler = StandardScaler()
+    X[features] = scaler.fit_transform(X[features])
+    # Train model
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    # Save model and preprocessors
+    joblib.dump(model, 'model/qualifying_rf_model.pkl')
+    joblib.dump(encoders, 'model/qualifying_encoders.pkl')
+    joblib.dump(scaler, 'model/qualifying_scaler.pkl')
+    print('Qualifying model trained and saved.')
+
+if __name__ == '__main__':
+    train_qualifying_model() 

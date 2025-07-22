@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 from fastf1.ergast import Ergast
 from collections import defaultdict
+import os
+import requests
+import zipfile
 
 def get_race_data(year=2023):
     ergast = Ergast()
@@ -85,7 +88,51 @@ def get_race_data(year=2023):
     df = df[['season', 'race_round', 'race_name', 'driver', 'constructor', 'qualifying_position', 'finishing_position', 'air_temp', 'humidity', 'rain', 'tire_compound', 'avg_finish_last3']]
     return df
 
+def download_f1db_csv(year_start=2010, year_end=2025, out_dir="data/f1db"):
+    url = "https://github.com/F1DB/f1db/releases/latest/download/f1db-csv.zip"
+    zip_path = os.path.join(out_dir, "f1db-csv.zip")
+    os.makedirs(out_dir, exist_ok=True)
+    print("Downloading F1DB CSV data...")
+    r = requests.get(url)
+    with open(zip_path, "wb") as f:
+        f.write(r.content)
+    print("Extracting...")
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(out_dir)
+    print("Done! Data available in", out_dir)
+
+def load_f1db_data(data_dir="data/f1db"):
+    results = pd.read_csv(f"{data_dir}/f1db-races-race-results.csv")
+    qualifying = pd.read_csv(f"{data_dir}/f1db-races-qualifying-results.csv")
+    drivers = pd.read_csv(f"{data_dir}/f1db-drivers.csv")
+    constructors = pd.read_csv(f"{data_dir}/f1db-constructors.csv")
+    races = pd.read_csv(f"{data_dir}/f1db-races.csv")
+    circuits = pd.read_csv(f"{data_dir}/f1db-circuits.csv")
+    pitstops = pd.read_csv(f"{data_dir}/f1db-races-pit-stops.csv")
+    return results, qualifying, drivers, constructors, races, circuits, pitstops
+
+def filter_and_merge_f1db(year_start=2010, year_end=2025, up_to_race=None, data_dir="data/f1db"):
+    results, qualifying, drivers, constructors, races, circuits, pitstops = load_f1db_data(data_dir)
+    # Filter races by year
+    races = races[(races['year'] >= year_start) & (races['year'] <= year_end)]
+    if up_to_race:
+        # Only include races up to a certain round in the last year
+        last_year = year_end
+        last_round = races[(races['year'] == last_year) & (races['officialName'].str.contains(up_to_race, case=False))]['round'].max()
+        races = races[(races['year'] < last_year) | ((races['year'] == last_year) & (races['round'] <= last_round))]
+    # Merge results with races, drivers, constructors, circuits
+    merged = results.merge(races, left_on='raceId', right_on='id', suffixes=('', '_race'))
+    merged = merged.merge(drivers, left_on='driverId', right_on='id', suffixes=('', '_driver'))
+    merged = merged.merge(constructors, left_on='constructorId', right_on='id', suffixes=('', '_constructor'))
+    merged = merged.merge(circuits, left_on='circuitId', right_on='id', suffixes=('', '_circuit'))
+    # Optionally merge qualifying and pitstops as needed
+    return merged
+
 if __name__ == '__main__':
     df = get_race_data(2023)
     print(df.head())
-    df.to_csv('data/f1_race_data_2023_enriched.csv', index=False) 
+    df.to_csv('data/f1_race_data_2023_enriched.csv', index=False)
+    download_f1db_csv()
+    merged = filter_and_merge_f1db(year_start=2010, year_end=2025, up_to_race='Silverstone')
+    print("Merged data shape:", merged.shape)
+    merged.to_csv("data/f1db_merged_2010_2025.csv", index=False) 

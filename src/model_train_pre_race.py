@@ -204,3 +204,38 @@ print(classification_report(y, meta_pred, target_names=['Not Top 5', 'Top 5']))
 joblib.dump(meta_model, 'model/meta_model_logreg.pkl')
 
 print("\nAll models trained and saved successfully.")
+
+import pandas as pd
+import joblib
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from feature_engineering import engineer_f1db_features, track_features
+
+def train_race_model():
+    df = pd.read_csv('data/f1db_merged_2010_2025.csv')
+    df = engineer_f1db_features(df, track_features)
+    # Select features and target
+    features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+    cat_features = ['driverId', 'constructorId']
+    X = df[features + cat_features].fillna(0)
+    y = (df['positionOrder'] <= 5).astype(int)  # Example: predict top 5 finish
+    # Encode categorical features
+    encoders = {}
+    for col in cat_features:
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col].astype(str))
+        encoders[col] = le
+    # Scale numerical features
+    scaler = StandardScaler()
+    X[features] = scaler.fit_transform(X[features])
+    # Train model
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    # Save model and preprocessors
+    joblib.dump(model, 'model/race_rf_model.pkl')
+    joblib.dump(encoders, 'model/race_encoders.pkl')
+    joblib.dump(scaler, 'model/race_scaler.pkl')
+    print('Race model trained and saved.')
+
+if __name__ == '__main__':
+    train_race_model()
