@@ -80,7 +80,346 @@ track_features = {
         'tyre_deg': 'low',
         'corner_type_dist': {'slow': 12, 'medium': 5, 'fast': 2}
     },
-    # ... Add all other circuits similarly ...
+    'australia': {
+        'length_km': 5.278,
+        'turns': 14,
+        'elevation': 10,
+        'drs_zones': 2,
+        'grip': 7,
+        'rain_prob': 0.25,
+        'track_type': 'street',
+        'overtaking_difficulty': 3,
+        'pit_lane_time_loss': 21.0,
+        'avg_lap_speed': 215,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 5, 'medium': 6, 'fast': 3}
+    },
+    'shanghai international circuit': {
+        'length_km': 5.451,
+        'turns': 16,
+        'elevation': 4,
+        'drs_zones': 2,
+        'grip': 7,
+        'rain_prob': 0.3,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 20.5,
+        'avg_lap_speed': 205,
+        'surface_type': 'asphalt',
+        'track_width': 14,
+        'safety_car_prob': 0.35,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 6, 'medium': 6, 'fast': 4}
+    },
+    'suzuka international racing course': {
+        'length_km': 5.807,
+        'turns': 18,
+        'elevation': 40,
+        'drs_zones': 1,
+        'grip': 8,
+        'rain_prob': 0.35,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 3,
+        'pit_lane_time_loss': 22.5,
+        'avg_lap_speed': 220,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.4,
+        'tyre_deg': 'high',
+        'corner_type_dist': {'slow': 4, 'medium': 8, 'fast': 6}
+    },
+    'bahrain international circuit': {
+        'length_km': 5.412,
+        'turns': 15,
+        'elevation': 3,
+        'drs_zones': 3,
+        'grip': 8,
+        'rain_prob': 0.01,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 22.0,
+        'avg_lap_speed': 205,
+        'surface_type': 'asphalt',
+        'track_width': 14,
+        'safety_car_prob': 0.2,
+        'tyre_deg': 'high',
+        'corner_type_dist': {'slow': 6, 'medium': 6, 'fast': 3}
+    },
+    'jeddah street circuit': {
+        'length_km': 6.174,
+        'turns': 27,
+        'elevation': 2,
+        'drs_zones': 3,
+        'grip': 8,
+        'rain_prob': 0.02,
+        'track_type': 'street',
+        'overtaking_difficulty': 5,
+        'pit_lane_time_loss': 20.0,
+        'avg_lap_speed': 250,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.6,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 8, 'medium': 12, 'fast': 7}
+    },
+    'baku city circuit': {
+        'length_km': 6.003,
+        'turns': 20,
+        'elevation': 2,
+        'drs_zones': 2,
+        'grip': 6,
+        'rain_prob': 0.15,
+        'track_type': 'street',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 20.0,
+        'avg_lap_speed': 210,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.6,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 8, 'medium': 8, 'fast': 4}
+    },
+    'imola': {
+        'length_km': 4.909,
+        'turns': 19,
+        'elevation': 30,
+        'drs_zones': 1,
+        'grip': 7,
+        'rain_prob': 0.3,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 2,
+        'pit_lane_time_loss': 25.0,
+        'avg_lap_speed': 210,
+        'surface_type': 'asphalt',
+        'track_width': 9.5,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'high',
+        'corner_type_dist': {'slow': 7, 'medium': 8, 'fast': 4}
+    },
+    'circuit de barcelona': {
+        'length_km': 4.675,
+        'turns': 14,
+        'elevation': 30,
+        'drs_zones': 2,
+        'grip': 8,
+        'rain_prob': 0.2,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 3,
+        'pit_lane_time_loss': 21.0,
+        'avg_lap_speed': 210,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.3,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 4, 'medium': 7, 'fast': 3}
+    },
+    'circuit gilles villeneuve': {
+        'length_km': 4.361,
+        'turns': 14,
+        'elevation': 6,
+        'drs_zones': 3,
+        'grip': 7,
+        'rain_prob': 0.35,
+        'track_type': 'street',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 19.0,
+        'avg_lap_speed': 210,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.6,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 6, 'medium': 6, 'fast': 2}
+    },
+    'red bull ring': {
+        'length_km': 4.318,
+        'turns': 10,
+        'elevation': 65,
+        'drs_zones': 3,
+        'grip': 8,
+        'rain_prob': 0.25,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 16.0,
+        'avg_lap_speed': 230,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.4,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 2, 'medium': 4, 'fast': 4}
+    },
+    'hungaroring': {
+        'length_km': 4.381,
+        'turns': 14,
+        'elevation': 34,
+        'drs_zones': 1,
+        'grip': 7,
+        'rain_prob': 0.3,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 2,
+        'pit_lane_time_loss': 16.0,
+        'avg_lap_speed': 190,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'high',
+        'corner_type_dist': {'slow': 6, 'medium': 6, 'fast': 2}
+    },
+    'circuit zandvoort': {
+        'length_km': 4.259,
+        'turns': 14,
+        'elevation': 8,
+        'drs_zones': 2,
+        'grip': 8,
+        'rain_prob': 0.35,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 3,
+        'pit_lane_time_loss': 18.0,
+        'avg_lap_speed': 200,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 4, 'medium': 6, 'fast': 4}
+    },
+    'autodromo nazionale di monza': {
+        'length_km': 5.793,
+        'turns': 11,
+        'elevation': 13,
+        'drs_zones': 2,
+        'grip': 7,
+        'rain_prob': 0.2,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 5,
+        'pit_lane_time_loss': 18.0,
+        'avg_lap_speed': 260,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.4,
+        'tyre_deg': 'low',
+        'corner_type_dist': {'slow': 3, 'medium': 4, 'fast': 4}
+    },
+    'marina bay street circuit': {
+        'length_km': 5.063,
+        'turns': 19,
+        'elevation': 4,
+        'drs_zones': 3,
+        'grip': 6,
+        'rain_prob': 0.4,
+        'track_type': 'street',
+        'overtaking_difficulty': 2,
+        'pit_lane_time_loss': 27.0,
+        'avg_lap_speed': 170,
+        'surface_type': 'asphalt',
+        'track_width': 10,
+        'safety_car_prob': 0.8,
+        'tyre_deg': 'high',
+        'corner_type_dist': {'slow': 10, 'medium': 7, 'fast': 2}
+    },
+    'losail international circuit': {
+        'length_km': 5.380,
+        'turns': 16,
+        'elevation': 6,
+        'drs_zones': 2,
+        'grip': 8,
+        'rain_prob': 0.01,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 20.0,
+        'avg_lap_speed': 220,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.2,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 4, 'medium': 8, 'fast': 4}
+    },
+    'circuit of the americas': {
+        'length_km': 5.513,
+        'turns': 20,
+        'elevation': 41,
+        'drs_zones': 2,
+        'grip': 8,
+        'rain_prob': 0.25,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 20.5,
+        'avg_lap_speed': 205,
+        'surface_type': 'asphalt',
+        'track_width': 15,
+        'safety_car_prob': 0.4,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 6, 'medium': 8, 'fast': 6}
+    },
+    'autódromo hermanos rodríguez': {
+        'length_km': 4.304,
+        'turns': 17,
+        'elevation': 2285,
+        'drs_zones': 3,
+        'grip': 6,
+        'rain_prob': 0.2,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 22.0,
+        'avg_lap_speed': 205,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.3,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 7, 'medium': 6, 'fast': 4}
+    },
+    'autódromo josé carlos pace': {
+        'length_km': 4.309,
+        'turns': 15,
+        'elevation': 43,
+        'drs_zones': 2,
+        'grip': 7,
+        'rain_prob': 0.4,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 18.0,
+        'avg_lap_speed': 210,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 5, 'medium': 6, 'fast': 4}
+    },
+    'las vegas street circuit': {
+        'length_km': 6.120,
+        'turns': 17,
+        'elevation': 7,
+        'drs_zones': 2,
+        'grip': 7,
+        'rain_prob': 0.05,
+        'track_type': 'street',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 19.0,
+        'avg_lap_speed': 220,
+        'surface_type': 'asphalt',
+        'track_width': 12,
+        'safety_car_prob': 0.5,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 5, 'medium': 8, 'fast': 4}
+    },
+    'silverstone circuit': {
+        'length_km': 5.891,
+        'turns': 18,
+        'elevation': 11,
+        'drs_zones': 2,
+        'grip': 8,
+        'rain_prob': 0.3,
+        'track_type': 'permanent',
+        'overtaking_difficulty': 4,
+        'pit_lane_time_loss': 20.0,
+        'avg_lap_speed': 230,
+        'surface_type': 'asphalt',
+        'track_width': 15,
+        'safety_car_prob': 0.4,
+        'tyre_deg': 'medium',
+        'corner_type_dist': {'slow': 4, 'medium': 8, 'fast': 6}
+    },
 }
 
 # --- Circuit Aliases: Map all common names to canonical keys ---
@@ -226,6 +565,42 @@ def load_and_engineer_features():
     final_df['positionOrder'] = final_df['positionOrder'].astype(int)
 
     return final_df
+
+def engineer_features_for_prediction(pred_df, combined_df):
+    """
+    Given a prediction DataFrame (driver_name, team_name, circuit, grid, etc.)
+    and the combined historical DataFrame, generate all required features for prediction.
+    """
+    pred_df = pred_df.copy()
+    # Rolling form features (last 3/5 races)
+    for window in [3, 5]:
+        for col, group_col in [(f'driver_form_last{window}', 'driver_name'),
+                               (f'team_form_last{window}', 'team_name')]:
+            last_form = combined_df.groupby(group_col)[col].last()
+            pred_df[col] = pred_df[group_col].map(last_form)
+            if col in combined_df.columns:
+                pred_df[col] = pred_df[col].fillna(combined_df[col].median())
+            else:
+                pred_df[col] = pred_df[col].fillna(0)
+    # Fill missing qualifying and pit/avg lap features with 0 or median
+    for col in ['q1', 'q2', 'q3', 'pit_stop_count', 'avg_lap_time', 'grid_vs_qual', 'pit_lap_interaction']:
+        if col not in pred_df.columns:
+            pred_df[col] = 0
+    # Ensure all required columns are present
+    required_cols = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
+    for col in required_cols:
+        if col not in pred_df.columns:
+            # Use median for numeric, 'Unknown' for object
+            if col in combined_df.columns:
+                if str(combined_df[col].dtype).startswith('float') or str(combined_df[col].dtype).startswith('int'):
+                    pred_df[col] = combined_df[col].median()
+                else:
+                    pred_df[col] = 'Unknown'
+            else:
+                pred_df[col] = 0
+    # Reorder columns to match training
+    pred_df = pred_df[required_cols]
+    return pred_df
 
 if __name__ == '__main__':
     print("Running feature engineering...")

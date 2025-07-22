@@ -222,14 +222,18 @@ def main():
 
     # Get lineup for the upcoming race
     try:
-        lineup = get_2025_lineup("spa-francorchamps")
+        lineup = get_2025_lineup("Australia")
         print(f"\nLoaded lineup for {len(lineup)} drivers.")
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         return
 
     # Create the feature set for the prediction using the combined data
-    pred_df = create_prediction_df(lineup, 2025, "spa-francorchamps", combined_df)
+    pred_df = create_prediction_df(lineup, 2025, "Australia", combined_df)
+
+    # Generate all required features for prediction
+    from feature_engineering import engineer_features_for_prediction
+    pred_df = engineer_features_for_prediction(pred_df, combined_df)
 
     # Print prediction features for debugging
     print("\nPrediction features for this race:")
