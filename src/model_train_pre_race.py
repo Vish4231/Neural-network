@@ -218,7 +218,7 @@ def train_race_model():
     features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
     cat_features = ['driverId', 'constructorId']
     X = df[features + cat_features].fillna(0)
-    y = (df['positionOrder'] <= 5).astype(int)  # Example: predict top 5 finish
+    y = (df['positionDisplayOrder'] <= 5).astype(int)  # Example: predict top 5 finish
     # Encode categorical features
     encoders = {}
     for col in cat_features:

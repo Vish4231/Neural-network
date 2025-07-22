@@ -202,14 +202,14 @@ def engineer_f1db_features(merged_df, track_features, window=5):
     df = merged_df.copy()
     # Sort for rolling calculations
     df = df.sort_values(['driverId', 'date'])
-    # Rolling average finish position as driver skill
-    df['driver_skill'] = df.groupby('driverId')['positionOrder'].transform(lambda x: x.rolling(window, min_periods=1).mean())
+    # Use 'positionDisplayOrder' as the finishing position
+    df['driver_skill'] = df.groupby('driverId')['positionDisplayOrder'].transform(lambda x: x.rolling(window, min_periods=1).mean())
     # Recent form: average finish in last 3 races
-    df['driver_form_last3'] = df.groupby('driverId')['positionOrder'].transform(lambda x: x.rolling(3, min_periods=1).mean())
+    df['driver_form_last3'] = df.groupby('driverId')['positionDisplayOrder'].transform(lambda x: x.rolling(3, min_periods=1).mean())
     # Team form: average finish in last 3 races for constructor
-    df['team_form_last3'] = df.groupby('constructorId')['positionOrder'].transform(lambda x: x.rolling(3, min_periods=1).mean())
+    df['team_form_last3'] = df.groupby('constructorId')['positionDisplayOrder'].transform(lambda x: x.rolling(3, min_periods=1).mean())
     # Add track features
-    df['circuit_key'] = df['name_circuit'].str.lower().str.strip()
+    df['circuit_key'] = df['name_circuit'].str.lower().str.strip() if 'name_circuit' in df.columns else ''
     for feat in list(track_features.values())[0].keys():
         df[feat] = df['circuit_key'].map(lambda x: track_features.get(x, {}).get(feat, np.nan))
     return df

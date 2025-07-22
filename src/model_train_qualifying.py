@@ -105,7 +105,7 @@ def train_qualifying_model():
     features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
     cat_features = ['driverId', 'constructorId']
     X = df[features + cat_features].fillna(0)
-    y = df['grid'].fillna(df['positionOrder'])  # Use grid if available, else positionOrder
+    y = df['gridPositionNumber'].fillna(df['positionDisplayOrder'])  # Use grid if available, else positionDisplayOrder
     # Encode categorical features
     encoders = {}
     for col in cat_features:
