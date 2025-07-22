@@ -210,7 +210,22 @@ class AdvancedF1Features:
             return 1.0  # Heavy rain
     
     def calculate_temperature_impact(self, temperature):
-        """Calculate temperature impact (optimal ~20-25°C)"""
+        """
+        Calculate the impact of temperature on race conditions.
+
+        This function determines how much the given temperature deviates from the optimal
+        racing temperature range, which is considered to be around 20-25°C. The impact
+        is normalized to a scale of 0 to 1, where 0 represents optimal conditions and
+        1 represents extreme temperature conditions.
+
+        Parameters:
+        temperature (float): The current air temperature in degrees Celsius.
+
+        Returns:
+        float: A value between 0 and 1 representing the temperature impact.
+               0 indicates optimal temperature conditions.
+               1 indicates extreme temperature conditions (either very hot or very cold).
+        """
         optimal_temp = 22.5
         return abs(temperature - optimal_temp) / 30.0
     

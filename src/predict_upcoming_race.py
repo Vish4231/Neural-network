@@ -207,106 +207,222 @@ def load_and_combine_data():
         print(f"Error details: {sys.exc_info()[2]}")
         return None
 
-def main():
-    print("--- Predicting Top 5 for Spa-Francorchamps 2025 ---")
+def get_2025_spa_lineup():
+    import pandas as pd
+    quali_path = 'F1_2025_Dataset/F1_2025_QualifyingResults.csv'
+    race_path = 'F1_2025_Dataset/F1_2025_RaceResults.csv'
+    # Qualifying lineup
+    quali_df = pd.read_csv(quali_path)
+    spa_quali = quali_df[quali_df['Track'] == 'Spa-Francorchamps']
+    if spa_quali.empty:
+        print('No Spa-Francorchamps entry found in 2025 qualifying results. Skipping quali simulation.')
+        quali_lineup = None
+    else:
+        spa_quali = spa_quali[pd.to_numeric(spa_quali['Position'], errors='coerce').notnull()]
+        spa_quali['Position'] = spa_quali['Position'].astype(int)
+        spa_quali = spa_quali.sort_values('Position')
+        if spa_quali.empty:
+            print('No Spa qualifying data with valid positions. Skipping qualifying simulation.')
+            quali_lineup = None
+        else:
+            quali_lineup = spa_quali[['Driver', 'Team', 'Position']].rename(columns={'Driver': 'driver_name', 'Team': 'team_name', 'Position': 'grid'})
+    # Race lineup
+    race_df = pd.read_csv(race_path)
+    spa_race = race_df[race_df['Track'] == 'Spa-Francorchamps']
+    spa_race = spa_race[pd.to_numeric(spa_race['Starting Grid'], errors='coerce').notnull()]
+    spa_race['Starting Grid'] = spa_race['Starting Grid'].astype(int)
+    spa_race = spa_race.sort_values('Starting Grid')
+    race_lineup = spa_race[['Driver', 'Team', 'Starting Grid']].rename(columns={'Driver': 'driver_name', 'Team': 'team_name', 'Starting Grid': 'grid'})
+    return quali_lineup, race_lineup
 
-    # Load models and preprocessors
-    artifacts = load_prediction_artifacts()
-    print("All prediction artifacts loaded successfully.")
-
-    # Load and combine data
+def predict_for_spa_2025():
+    # Use up-to-date Spa 2025 lineups
+    quali_lineup, race_lineup = get_2025_spa_lineup()
+    from feature_engineering import engineer_features_for_prediction, track_features
+    # Load combined data for feature engineering
     combined_df = load_and_combine_data()
-    if combined_df is None:
-        print("Failed to load and combine data. Exiting.")
-        return
+    import joblib
+    features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+    cat_features = ['driver_name', 'team_name']
+    # --- Qualifying Prediction ---
+    if quali_lineup is not None and not quali_lineup.empty:
+        quali_pred_df = engineer_features_for_prediction(quali_lineup, combined_df)
+        if quali_pred_df.empty:
+            print('No Spa qualifying data after feature engineering. Skipping qualifying simulation.')
+        else:
+            qual_model = joblib.load('model/qualifying_rf_model.pkl')
+            qual_encoders = joblib.load('model/qualifying_encoders.pkl')
+            qual_scaler = joblib.load('model/qualifying_scaler.pkl')
+            X = quali_pred_df[features + cat_features].fillna(0)
+            for col in cat_features:
+                le = qual_encoders[col]
+                X[col] = le.transform(X[col].astype(str))
+            X[features] = qual_scaler.transform(X[features])
+            quali_preds = qual_model.predict(X)
+            quali_lineup = quali_lineup.iloc[:len(quali_preds)].copy()
+            quali_lineup['predicted_grid'] = quali_preds
+            print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
+            for i, row in quali_lineup.sort_values('predicted_grid').head(5).iterrows():
+                print(f"{int(row['predicted_grid'])}. {row['driver_name']} ({row['team_name']})")
+    else:
+        print('No Spa qualifying data available. Skipping qualifying simulation.')
+    # --- Race Prediction ---
+    race_pred_df = engineer_features_for_prediction(race_lineup, combined_df)
+    race_model = joblib.load('model/race_rf_model.pkl')
+    race_encoders = joblib.load('model/race_encoders.pkl')
+    race_scaler = joblib.load('model/race_scaler.pkl')
+    X_race = race_pred_df[features + cat_features].fillna(0)
+    for col in cat_features:
+        le = race_encoders[col]
+        X_race[col] = le.transform(X_race[col].astype(str))
+    X_race[features] = race_scaler.transform(X_race[features])
+    race_probs = race_model.predict_proba(X_race)[:, 1]
+    race_lineup['race_top5_prob'] = race_probs
+    print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
+    for i, row in race_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+        print(f"{row['driver_name']} ({row['team_name']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
 
-    # Get lineup for the upcoming race
+import pandas as pd
+import joblib
+from feature_engineering import engineer_f1db_features, track_features
+
+def predict_for_spa_2025():
+    # Load merged and engineered data
+    df = pd.read_csv('data/f1db_merged_2010_2025.csv')
+    df = engineer_f1db_features(df, track_features)
+    # Filter for Spa 2025 drivers/teams (simulate upcoming race)
+    spa_circuit_key = 'circuit de spa-francorchamps'
+    latest_year = 2025
+    # Get the latest known lineup for Spa
+    spa_lineup = df[(df['year'] == latest_year) & (df['circuit_key'] == spa_circuit_key)]
+    # If not available, fallback to 2024
+    if spa_lineup.empty:
+        spa_lineup = df[(df['year'] == 2024) & (df['circuit_key'] == spa_circuit_key)]
+    # Use only the latest entry per driver
+    spa_lineup = spa_lineup.sort_values('date').groupby('driverId').tail(1)
+    features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+    cat_features = ['driverId', 'constructorId']
+    X = spa_lineup[features + cat_features].fillna(0)
+    # --- Qualifying Prediction ---
+    qual_model = joblib.load('model/qualifying_rf_model.pkl')
+    qual_encoders = joblib.load('model/qualifying_encoders.pkl')
+    qual_scaler = joblib.load('model/qualifying_scaler.pkl')
+    for col in cat_features:
+        le = qual_encoders[col]
+        X[col] = le.transform(X[col].astype(str))
+    X[features] = qual_scaler.transform(X[features])
+    quali_preds = qual_model.predict(X)
+    spa_lineup['predicted_grid'] = quali_preds
+    print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
+    for i, row in spa_lineup.sort_values('predicted_grid').head(5).iterrows():
+        print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
+    # --- Race Prediction ---
+    race_model = joblib.load('model/race_rf_model.pkl')
+    race_encoders = joblib.load('model/race_encoders.pkl')
+    race_scaler = joblib.load('model/race_scaler.pkl')
+    X_race = spa_lineup[features + cat_features].fillna(0)
+    for col in cat_features:
+        le = race_encoders[col]
+        X_race[col] = le.transform(X_race[col].astype(str))
+    X_race[features] = race_scaler.transform(X_race[features])
+    race_probs = race_model.predict_proba(X_race)[:, 1]
+    spa_lineup['race_top5_prob'] = race_probs
+    print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
+    for i, row in spa_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+        print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
+
+if __name__ == '__main__':
+    predict_for_spa_2025()
+
+def get_2025_lineup_from_csv(track_name):
+    import pandas as pd
     try:
-        lineup = get_2025_lineup("Australia")
-        print(f"\nLoaded lineup for {len(lineup)} drivers.")
-    except (FileNotFoundError, ValueError) as e:
-        print(f"Error: {e}")
-        return
+        df = pd.read_csv('data/F1_2025_RaceResults.csv')
+    except FileNotFoundError:
+        print('F1_2025_RaceResults.csv not found.')
+        return None
+    # Filter for the given track
+    lineup = df[df['Track'].str.lower() == track_name.lower()]
+    if lineup.empty:
+        print(f'No 2025 lineup found for {track_name}.')
+        return None
+    # Only use drivers with a valid grid position (exclude NC, DQ, etc.)
+    lineup = lineup[lineup['Starting Grid'].apply(lambda x: str(x).isdigit())]
+    lineup = lineup.sort_values('Starting Grid')
+    return lineup[['Driver', 'Team', 'Starting Grid']]
 
-    # Create the feature set for the prediction using the combined data
-    pred_df = create_prediction_df(lineup, 2025, "Australia", combined_df)
-
-    # Generate all required features for prediction
-    from feature_engineering import engineer_features_for_prediction
-    pred_df = engineer_features_for_prediction(pred_df, combined_df)
-
-    # Print prediction features for debugging
-    print("\nPrediction features for this race:")
-    print(pred_df)
-
-    # Preprocess the prediction data
-    pred_processed = pred_df.copy()
-    
-    # Define feature lists from the combined dataframe
-    features = [col for col in combined_df.columns if col not in ['positionOrder', 'raceId']]
-    cat_features = ['team_name', 'driver_name', 'circuit', 'track_type']
-    num_features = [f for f in features if f not in cat_features and f != 'year']
-
-    # Impute any missing values that might have occurred
-    for col in num_features:
-        if col in pred_processed.columns:
-            pred_processed[col] = pred_processed[col].fillna(combined_df[col].median())
+def predict_for_yas_marina_2025():
+    # Try to get the 2025 lineup from the CSV using the correct track name
+    yas_csv_track_name = 'Abu Dhabi'  # This matches the value in F1_2025_RaceResults.csv
+    yas_lineup = get_2025_lineup_from_csv(yas_csv_track_name)
+    if yas_lineup is not None and not yas_lineup.empty:
+        # Build a DataFrame with the required features for prediction
+        # Use the most recent historical data for each driver/team to fill in features
+        df_hist = pd.read_csv('data/f1db_merged_2010_2025.csv')
+        df_hist = engineer_f1db_features(df_hist, track_features)
+        features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+        cat_features = ['driverId', 'constructorId']
+        # Map driver/team to their most recent stats
+        pred_rows = []
+        for _, row in yas_lineup.iterrows():
+            # Find the most recent entry for this driver/team at Yas Marina or elsewhere
+            hist_row = df_hist[df_hist['fullName'].str.lower() == row['Driver'].lower()]
+            if hist_row.empty:
+                continue
+            hist_row = hist_row.sort_values('date').iloc[-1]
+            pred_row = {f: hist_row.get(f, 0) for f in features + cat_features}
+            pred_row['fullName'] = row['Driver']
+            pred_row['name_constructor'] = row['Team']
+            pred_rows.append(pred_row)
+        yas_lineup_df = pd.DataFrame(pred_rows)
+        if yas_lineup_df.empty:
+            print('No matching historical data for 2025 lineup.')
+            return
+        X = yas_lineup_df[features + cat_features].fillna(0)
+    else:
+        # Fallback to historical method
+        df = pd.read_csv('data/f1db_merged_2010_2025.csv')
+        df = engineer_f1db_features(df, track_features)
+        yas_circuit_key = 'Yas Marina'
+        for year in [2025, 2024, 2023, 2022, 2021]:
+            yas_lineup_df = df[(df['year'] == year) & (df['name_circuit'] == yas_circuit_key)]
+            if not yas_lineup_df.empty:
+                break
+        if yas_lineup_df.empty:
+            print('No Yas Marina lineup found for recent years.')
+            return
+        yas_lineup_df = yas_lineup_df.sort_values('date').groupby('driverId').tail(1)
+        features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+        cat_features = ['driverId', 'constructorId']
+        X = yas_lineup_df[features + cat_features].fillna(0)
+    # --- Qualifying Prediction ---
+    qual_model = joblib.load('model/qualifying_rf_model.pkl')
+    qual_encoders = joblib.load('model/qualifying_encoders.pkl')
+    qual_scaler = joblib.load('model/qualifying_scaler.pkl')
     for col in cat_features:
-        if col in pred_processed.columns:
-            mode_series = combined_df[col].mode()
-            if not mode_series.empty:
-                mode = mode_series[0]
-            else:
-                mode = "Unknown"
-            pred_processed[col] = pred_processed[col].fillna(mode)
-
-    # Encode categorical features
+        le = qual_encoders[col]
+        X[col] = le.transform(X[col].astype(str))
+    X[features] = qual_scaler.transform(X[features])
+    quali_preds = qual_model.predict(X)
+    yas_lineup_df['predicted_grid'] = quali_preds
+    print('\n--- Predicted Yas Marina 2025 Qualifying Top 5 ---')
+    for i, row in yas_lineup_df.sort_values('predicted_grid').head(5).iterrows():
+        print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
+    # --- Race Prediction ---
+    race_model = joblib.load('model/race_rf_model.pkl')
+    race_encoders = joblib.load('model/race_encoders.pkl')
+    race_scaler = joblib.load('model/race_scaler.pkl')
+    X_race = yas_lineup_df[features + cat_features].fillna(0)
     for col in cat_features:
-        le = artifacts['encoders'][col]
-        # Handle unseen labels by mapping them to a known class
-        pred_processed[col] = pred_processed[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
-        pred_processed[col] = le.transform(pred_processed[col])
+        le = race_encoders[col]
+        X_race[col] = le.transform(X_race[col].astype(str))
+    X_race[features] = race_scaler.transform(X_race[features])
+    race_probs = race_model.predict_proba(X_race)[:, 1]
+    yas_lineup_df['race_top5_prob'] = race_probs
+    print('\n--- Predicted Yas Marina 2025 Race Top 5 Probabilities ---')
+    for i, row in yas_lineup_df.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+        print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
 
-    # Scale numerical features
-    pred_processed.loc[:, num_features] = artifacts['scaler'].transform(pred_processed[num_features])
-    print("Prediction data preprocessed successfully.")
-
-    # Make predictions with all models
-    print("\nGenerating predictions from all models...")
-    X_pred = pred_processed[features]
-    
-    xgb_probs = artifacts['xgb_model'].predict_proba(X_pred)[:, 1]
-    lgbm_probs = artifacts['lgbm_model'].predict(X_pred)
-    cat_probs = artifacts['cat_model'].predict_proba(X_pred)[:, 1]
-    nn_probs = artifacts['nn_model'].predict(X_pred).flatten()
-
-    # Use the meta-model for the final ensemble prediction
-    stack_X = np.vstack([xgb_probs, lgbm_probs, cat_probs, nn_probs]).T
-
-    # Impute any NaNs in stack_X before meta-model prediction
-    if np.isnan(stack_X).any():
-        print('Warning: NaNs found in stack_X for prediction, imputing with column means.')
-        for i in range(stack_X.shape[1]):
-            if np.isnan(stack_X[:, i]).all():
-                stack_X[:, i] = 0.0
-        col_means = np.nanmean(stack_X, axis=0)
-        inds = np.where(np.isnan(stack_X))
-        stack_X[inds] = np.take(col_means, inds[1])
-
-    ensemble_probs = artifacts['meta_model'].predict_proba(stack_X)[:, 1]
-
-    # Display results
-    results_df = lineup.copy()
-    results_df['probability'] = ensemble_probs
-    results_df = results_df.sort_values('probability', ascending=False).reset_index(drop=True)
-
-    print("\n--- Predicted Top 5 Finishers (Ensemble Model) ---")
-    for i, row in results_df.head(5).iterrows():
-        medal = ["🥇", "🥈", "🥉", "🏅", "🏅"][i]
-        print(f"{i+1}. {medal} {row['driver_name']} ({row['team_name']}) - Probability: {row['probability']:.2%}")
-
-    print("\n--- Full Probability Ranking ---")
-    print(results_df.to_string(index=False))
-
-if __name__ == "__main__":
-    main()
+# To run Yas Marina prediction, uncomment below:
+# if __name__ == '__main__':
+#     predict_for_yas_marina_2025()
