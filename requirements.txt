@@ -3,3 +3,7 @@ requests
 numpy
 scikit-learn
 tensorflow 
+xgboost
+lightgbm
+catboost
+streamlit

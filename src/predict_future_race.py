@@ -50,6 +50,21 @@ def load_models():
     return artifacts
 
 
+def load_race_artifacts():
+    paths = {
+        'race_model': os.path.join(MODELS_DIR, 'race_rf_model.pkl'),
+        'race_encoders': os.path.join(MODELS_DIR, 'race_encoders.pkl'),
+        'race_scaler': os.path.join(MODELS_DIR, 'race_scaler.pkl'),
+    }
+    if not all(os.path.exists(p) for p in paths.values()):
+        return None
+    return {
+        'model': joblib.load(paths['race_model']),
+        'encoders': joblib.load(paths['race_encoders']),
+        'scaler': joblib.load(paths['race_scaler']),
+    }
+
+
 def load_lineup(year: int, circuit: str) -> pd.DataFrame:
     canonical = normalize_circuit_name(circuit)
     # Try curated 2025 dataset first
@@ -81,6 +96,41 @@ def build_prediction_frame(lineup: pd.DataFrame, circuit: str) -> pd.DataFrame:
         base.update(tf)
         rows.append(base)
     return pd.DataFrame(rows)
+
+
+def prepare_race_features(lineup: pd.DataFrame, circuit: str) -> pd.DataFrame:
+    """Build inputs for race RF model using f1db merged history and track features."""
+    merged_path = 'data/f1db_merged_2010_2025.csv'
+    if not os.path.exists(merged_path):
+        return pd.DataFrame()
+    df = pd.read_csv(merged_path)
+    # Engineer rolling stats
+    from feature_engineering import engineer_f1db_features
+    df = engineer_f1db_features(df, track_features)
+    # Map names to IDs
+    name_map = df[['fullName', 'driverId', 'name_constructor', 'constructorId']].dropna().drop_duplicates()
+    # Normalize for join
+    def norm(s):
+        return s.str.strip().str.lower()
+    name_map['full_norm'] = norm(name_map['fullName'])
+    name_map['team_norm'] = norm(name_map['name_constructor'])
+    lineup = lineup.copy()
+    lineup['full_norm'] = norm(lineup['driver_name'])
+    lineup['team_norm'] = norm(lineup['team_name'])
+    joined = lineup.merge(name_map[['full_norm','team_norm','driverId','constructorId']], on=['full_norm','team_norm'], how='left')
+    # Latest rolling stats per driver
+    latest_stats = df.sort_values('date').groupby('driverId').tail(1)[['driverId','driver_skill','driver_form_last3']]
+    team_stats = df.sort_values('date').groupby('constructorId').tail(1)[['constructorId','team_form_last3']]
+    joined = joined.merge(latest_stats, on='driverId', how='left').merge(team_stats, on='constructorId', how='left')
+    # Add track features for target circuit
+    canonical = normalize_circuit_name(circuit)
+    tf = track_features.get(canonical, {})
+    for k, v in tf.items():
+        joined[k] = v
+    # Select expected columns
+    cols = ['driverId','constructorId','driver_name','team_name','driver_skill','driver_form_last3','team_form_last3',
+            'length_km','turns','elevation','drs_zones','grip','rain_prob']
+    return joined[cols]
 
 
 def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame:
@@ -157,13 +207,51 @@ def main():
     pred_features = engineer_features_for_prediction(base_pred, combined)
 
     print('Running ensemble predictions...')
-    results = ensemble_predict(pred_features, artifacts)
-    results = results.sort_values('prob_top5', ascending=False).reset_index(drop=True)
-    results['rank'] = np.arange(1, len(results) + 1)
+    base_results = ensemble_predict(pred_features, artifacts)
+    base_results = base_results.sort_values('prob_top5', ascending=False).reset_index(drop=True)
+    base_results['grid_rank_proxy'] = np.arange(1, len(base_results) + 1)
 
-    print('\nPredicted Top 10 (by Top-5 probability):')
-    for _, row in results.head(10).iterrows():
-        print(f"{int(row['rank'])}. {row['driver_name']} ({row['team_name']}) - {row['prob_top5']:.3f}")
+    # Race finish ranking (if RF model available)
+    race_art = load_race_artifacts()
+    if race_art is not None:
+        print('Computing race-finish ranking using race RF model...')
+        race_df = prepare_race_features(lineup, args.circuit)
+        if not race_df.empty and race_df[['driverId','constructorId']].notna().all().all():
+            # Encode cat
+            X = race_df[['driver_skill','driver_form_last3','team_form_last3','length_km','turns','elevation','drs_zones','grip','rain_prob', 'driverId','constructorId']].copy()
+            for col in ['driverId','constructorId']:
+                le = race_art['encoders'][col]
+                X[col] = le.transform(X[col].astype(str))
+            num_feats = ['driver_skill','driver_form_last3','team_form_last3','length_km','turns','elevation','drs_zones','grip','rain_prob']
+            X[num_feats] = race_art['scaler'].transform(X[num_feats])
+            proba_top5 = race_art['model'].predict_proba(X)[:, 1]
+            race_out = race_df[['driver_name','team_name']].copy()
+            race_out['race_prob_top5'] = proba_top5
+            race_out = race_out.sort_values('race_prob_top5', ascending=False).reset_index(drop=True)
+            race_out['race_rank'] = np.arange(1, len(race_out) + 1)
+            # Merge
+            results = base_results.merge(race_out, on=['driver_name','team_name'], how='left')
+        else:
+            print('Race RF features not fully available. Falling back to proxy ranking.')
+            results = base_results.copy()
+            results['race_prob_top5'] = results['prob_top5']
+            results['race_rank'] = results['grid_rank_proxy']
+    else:
+        print('Race RF model not found. Using proxy ranking from ensemble.')
+        results = base_results.copy()
+        results['race_prob_top5'] = results['prob_top5']
+        results['race_rank'] = results['grid_rank_proxy']
+
+    # Final ordering and output
+    results = results[['driver_name','team_name','prob_top5','grid_rank_proxy','race_prob_top5','race_rank']]
+
+    print('\nPredicted Grid (proxy) Top 10:')
+    for _, row in results.sort_values('grid_rank_proxy').head(10).iterrows():
+        print(f"{int(row['grid_rank_proxy'])}. {row['driver_name']} ({row['team_name']}) - score {row['prob_top5']:.3f}")
+
+    print('\nPredicted Race Finish (Top-5 prob) Top 10:')
+    for _, row in results.sort_values('race_rank').head(10).iterrows():
+        print(f"{int(row['race_rank'])}. {row['driver_name']} ({row['team_name']}) - prob {row['race_prob_top5']:.3f}")
 
     results.to_csv(args.output, index=False)
     print(f"Saved predictions to {args.output}")
