@@ -7,6 +7,9 @@ import xgboost as xgb
 import lightgbm as lgb
 import catboost as cb
 from tensorflow import keras
+from sklearn.isotonic import IsotonicRegression
+import pickle
+import re
 
 from feature_engineering import (
     load_and_engineer_features,
@@ -55,13 +58,23 @@ def load_race_artifacts():
         'race_model': os.path.join(MODELS_DIR, 'race_rf_model.pkl'),
         'race_encoders': os.path.join(MODELS_DIR, 'race_encoders.pkl'),
         'race_scaler': os.path.join(MODELS_DIR, 'race_scaler.pkl'),
+        'race_calibrator': os.path.join(MODELS_DIR, 'race_rf_calibrator.pkl'),
     }
-    if not all(os.path.exists(p) for p in paths.values()):
+    if not all(os.path.exists(p) for p in [paths['race_model'], paths['race_encoders'], paths['race_scaler']]):
         return None
+    calib = None
+    if os.path.exists(paths['race_calibrator']):
+        try:
+            with open(paths['race_calibrator'], 'rb') as f:
+                calib = pickle.load(f)
+        except Exception:
+            calib = None
     return {
         'model': joblib.load(paths['race_model']),
         'encoders': joblib.load(paths['race_encoders']),
         'scaler': joblib.load(paths['race_scaler']),
+        'calibrator': calib,
+        'calibrator_path': paths['race_calibrator'],
     }
 
 
@@ -71,7 +84,14 @@ def load_lineup(year: int, circuit: str) -> pd.DataFrame:
     dataset_path = 'F1_2025_Dataset/F1_2025_RaceResults.csv'
     if os.path.exists(dataset_path):
         df = pd.read_csv(dataset_path)
-        df_loc = df[df['Track'].str.strip().str.lower() == canonical]
+        # Normalize track names in dataset for robust match
+        def _norm(v):
+            try:
+                return normalize_circuit_name(str(v))
+            except Exception:
+                return str(v).strip().lower()
+        df['_track_norm'] = df['Track'].apply(_norm)
+        df_loc = df[df['_track_norm'] == canonical]
         if not df_loc.empty:
             lineup = df_loc[['Driver', 'Team']].drop_duplicates()
             lineup = lineup.rename(columns={'Driver': 'driver_name', 'Team': 'team_name'})
@@ -85,6 +105,100 @@ def load_lineup(year: int, circuit: str) -> pd.DataFrame:
         return last[['driver_name','team_name']].drop_duplicates()
     last_at_circuit = hist_circ.sort_values(['year','raceId']).groupby(['driver_name','team_name']).tail(1)
     return last_at_circuit[['driver_name','team_name']].drop_duplicates()
+
+
+def fetch_lineup_fastf1(year: int, circuit: str) -> pd.DataFrame:
+    """Try to fetch the latest lineup (driver/team) using FastF1 for the given event.
+
+    Strategy:
+    - Load the season schedule
+    - Fuzzy match event name/location to provided circuit
+    - Load Race (preferred) or Qualifying session results
+    - Extract driver full name and team name
+    """
+    try:
+        import fastf1
+        from fastf1 import plotting as _ff1_plotting  # noqa: F401 (ensures pandas options set)
+        fastf1.Cache.enable_cache('fastf1_cache')
+    except Exception:
+        return pd.DataFrame()
+
+    def _canon(s: str) -> str:
+        s = str(s).strip().lower()
+        s = re.sub(r"[^a-z0-9\s]", "", s)
+        return s
+
+    target = _canon(circuit)
+    try:
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+    except Exception:
+        return pd.DataFrame()
+
+    # Best-effort match: event name or location contains circuit tokens
+    schedule['_name_canon'] = schedule['EventName'].apply(_canon)
+    schedule['_loc_canon'] = schedule['Location'].apply(_canon)
+    # direct contains
+    cand = schedule[(schedule['_name_canon'].str.contains(target)) | (schedule['_loc_canon'].str.contains(target))]
+    if cand.empty:
+        # token match
+        toks = [t for t in target.split() if len(t) > 3]
+        def _tok_hit(x):
+            return any(t in x for t in toks) if toks else False
+        cand = schedule[schedule['_name_canon'].apply(_tok_hit) | schedule['_loc_canon'].apply(_tok_hit)]
+    if cand.empty:
+        return pd.DataFrame()
+
+    # Prefer Race session of the best candidate (last occurrence)
+    ev = cand.sort_values('EventFormat').tail(1).iloc[0]
+    try_order = ['Race', 'Sprint', 'Qualifying']
+    session = None
+    for sess_name in try_order:
+        try:
+            s = fastf1.get_session(int(ev['EventDate'].year), ev['RoundNumber'], sess_name)
+            s.load()
+            session = s
+            break
+        except Exception:
+            continue
+    if session is None or session.results is None or session.results.empty:
+        return pd.DataFrame()
+
+    res = session.results
+    # Columns usually available: Abbreviation, DriverNumber, TeamName, FirstName, LastName
+    def _full(row):
+        fn = str(row.get('FirstName', '')).strip()
+        ln = str(row.get('LastName', '')).strip()
+        return (fn + ' ' + ln).strip()
+    lineup = pd.DataFrame({
+        'driver_name': res.apply(_full, axis=1),
+        'team_name': res.get('TeamName').astype(str) if 'TeamName' in res.columns else res.get('Team', pd.Series(dtype=str)).astype(str)
+    })
+    lineup = lineup.dropna().drop_duplicates()
+    if lineup.empty:
+        return lineup
+
+    # Normalize team naming to align with our 2025 dataset aliases
+    alias = {
+        'oracle red bull racing': 'Red Bull Racing Honda RBPT',
+        'red bull racing': 'Red Bull Racing Honda RBPT',
+        'racing bulls': 'Racing Bulls Honda RBPT',
+        'rb': 'Racing Bulls Honda RBPT',
+        'mclaren formula 1 team': 'McLaren Mercedes',
+        'mercedesamg petronas formula one team': 'Mercedes',
+        'mercedes': 'Mercedes',
+        'scuderia ferrari': 'Ferrari',
+        'aston martin aramco formula one team': 'Aston Martin Aramco Mercedes',
+        'aston martin': 'Aston Martin Aramco Mercedes',
+        'williams racing': 'Williams Mercedes',
+        'kick sauber': 'Kick Sauber Ferrari',
+        'alpine f1 team': 'Alpine Renault',
+        'haas f1 team': 'Haas Ferrari',
+    }
+    def _norm_team(t):
+        k = _canon(t)
+        return alias.get(k, t)
+    lineup['team_name'] = lineup['team_name'].apply(_norm_team)
+    return lineup[['driver_name','team_name']]
 
 
 def build_prediction_frame(lineup: pd.DataFrame, circuit: str) -> pd.DataFrame:
@@ -118,6 +232,63 @@ def prepare_race_features(lineup: pd.DataFrame, circuit: str) -> pd.DataFrame:
     lineup['full_norm'] = norm(lineup['driver_name'])
     lineup['team_norm'] = norm(lineup['team_name'])
     joined = lineup.merge(name_map[['full_norm','team_norm','driverId','constructorId']], on=['full_norm','team_norm'], how='left')
+
+    # Attempt to fill missing IDs using recent-year maps and aliases
+    recent = df[df.get('year', 0) >= 2020]
+    # Driver map by exact fullname (case-insens.)
+    drv_latest = recent.sort_values('date').dropna(subset=['fullName','driverId']).drop_duplicates('fullName', keep='last')
+    drv_map = {str(n).strip().lower(): v for n, v in zip(drv_latest['fullName'], drv_latest['driverId'])}
+    # Constructor map by exact constructor name
+    cons_latest = recent.sort_values('date').dropna(subset=['name_constructor','constructorId']).drop_duplicates('name_constructor', keep='last')
+    cons_map = {str(n).strip().lower(): v for n, v in zip(cons_latest['name_constructor'], cons_latest['constructorId'])}
+    # Team alias normalization for 2025 dataset naming → f1db constructor naming
+    team_alias = {
+        'red bull racing honda rbpt': 'red bull',
+        'mclaren mercedes': 'mclaren',
+        'mercedes': 'mercedes',
+        'ferrari': 'ferrari',
+        'williams mercedes': 'williams',
+        'racing bulls honda rbpt': 'racing bulls',
+        'alpine renault': 'alpine',
+        'haas ferrari': 'haas',
+        'aston martin aramco mercedes': 'aston martin',
+        'kick sauber ferrari': 'sauber',
+    }
+    # Fill driverId where missing
+    joined['driverId'] = joined['driverId'].fillna(joined['driver_name'].str.strip().str.lower().map(drv_map))
+    # Fill constructorId using alias → cons_map
+    joined['team_alias'] = joined['team_name'].str.strip().str.lower().map(team_alias).fillna(joined['team_name'].str.strip().str.lower())
+    joined['constructorId'] = joined['constructorId'].fillna(joined['team_alias'].map(cons_map))
+    # As a final fallback, add explicit 2025 mappings for rookies/renames
+    explicit_driver = {
+        'kimi antonelli': 'antonke01',
+        'liam lawson': 'lawsoli01',
+        'gabriel bortoleto': 'bortoga01',
+        'oscar piastri': 'piasros01',
+        'lando norris': 'norrila01',
+        'george russell': 'russgeo01',
+        'charles leclerc': 'leclech01',
+        'max verstappen': 'verstma01',
+        'lewis hamilton': 'hamille01',
+        'pierre gasly': 'gaslypi01',
+        'yuki tsunoda': 'tsunoyu01',
+        'carlos sainz': 'sainzca01',
+        'alexander albon': 'albona01',
+    }
+    explicit_team = {
+        'racing bulls': 'racing_bulls',
+        'red bull': 'red_bull',
+        'aston martin': 'aston_martin',
+        'sauber': 'sauber',
+        'williams': 'williams',
+        'ferrari': 'ferrari',
+        'mercedes': 'mercedes',
+        'alpine': 'alpine',
+        'mclaren': 'mclaren',
+        'haas': 'haas',
+    }
+    joined['driverId'] = joined['driverId'].fillna(joined['driver_name'].str.strip().str.lower().map(explicit_driver))
+    joined['constructorId'] = joined['constructorId'].fillna(joined['team_alias'].map(explicit_team))
     # Latest rolling stats per driver
     latest_stats = df.sort_values('date').groupby('driverId').tail(1)[['driverId','driver_skill','driver_form_last3']]
     team_stats = df.sort_values('date').groupby('constructorId').tail(1)[['constructorId','team_form_last3']]
@@ -131,6 +302,39 @@ def prepare_race_features(lineup: pd.DataFrame, circuit: str) -> pd.DataFrame:
     cols = ['driverId','constructorId','driver_name','team_name','driver_skill','driver_form_last3','team_form_last3',
             'length_km','turns','elevation','drs_zones','grip','rain_prob']
     return joined[cols]
+
+
+def fit_or_load_race_calibrator(race_artifacts):
+    if race_artifacts.get('calibrator') is not None:
+        return race_artifacts['calibrator']
+    merged_path = 'data/f1db_merged_2010_2025.csv'
+    if not os.path.exists(merged_path):
+        return None
+    try:
+        df = pd.read_csv(merged_path)
+        from feature_engineering import engineer_f1db_features
+        df = engineer_f1db_features(df, track_features)
+        features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
+        cat_features = ['driverId', 'constructorId']
+        X = df[features + cat_features].fillna(0).copy()
+        y = (df['positionDisplayOrder'] <= 5).astype(int)
+        for col in cat_features:
+            le = race_artifacts['encoders'][col]
+            vals = X[col].astype(str)
+            vals = vals.map(lambda v: v if v in le.classes_ else 'Unknown')
+            if 'Unknown' not in le.classes_:
+                le.classes_ = np.append(le.classes_, 'Unknown')
+            X[col] = le.transform(vals)
+        X[features] = race_artifacts['scaler'].transform(X[features])
+        base_probs = race_artifacts['model'].predict_proba(X)[:, 1]
+        # Isotonic regression calibrates monotonically without assuming sigmoid shape
+        ir = IsotonicRegression(out_of_bounds='clip', y_min=0.0, y_max=1.0)
+        ir.fit(base_probs, y.values)
+        with open(race_artifacts['calibrator_path'], 'wb') as f:
+            pickle.dump(ir, f)
+        return ir
+    except Exception:
+        return None
 
 
 def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame:
@@ -204,6 +408,7 @@ def main():
     parser.add_argument('--year', type=int, default=2025)
     parser.add_argument('--circuit', type=str, required=True, help='Circuit name, e.g., "Spa-Francorchamps"')
     parser.add_argument('--output', type=str, default='predictions_future_race.csv')
+    parser.add_argument('--use_fastf1', action='store_true', help='Fetch latest lineup from FastF1 if available')
     args = parser.parse_args()
 
     print('Loading models...')
@@ -211,7 +416,12 @@ def main():
     print('Loading historical features...')
     combined = load_and_engineer_features()
     print('Loading lineup...')
-    lineup = load_lineup(args.year, args.circuit)
+    lineup = pd.DataFrame()
+    if args.use_fastf1:
+        print('Trying FastF1 lineup...')
+        lineup = fetch_lineup_fastf1(args.year, args.circuit)
+    if lineup.empty:
+        lineup = load_lineup(args.year, args.circuit)
     if lineup.empty:
         print('No lineup found; aborting.')
         return
@@ -230,15 +440,29 @@ def main():
     if race_art is not None:
         print('Computing race-finish ranking using race RF model...')
         race_df = prepare_race_features(lineup, args.circuit)
-        if not race_df.empty and race_df[['driverId','constructorId']].notna().all().all():
+        if not race_df.empty:
             # Encode cat
             X = race_df[['driver_skill','driver_form_last3','team_form_last3','length_km','turns','elevation','drs_zones','grip','rain_prob', 'driverId','constructorId']].copy()
+            # Fill missing IDs with 'Unknown' placeholder
+            X['driverId'] = X['driverId'].fillna('Unknown').astype(str)
+            X['constructorId'] = X['constructorId'].fillna('Unknown').astype(str)
             for col in ['driverId','constructorId']:
                 le = race_art['encoders'][col]
-                X[col] = le.transform(X[col].astype(str))
+                vals = X[col].astype(str)
+                # Replace unseen with 'Unknown'
+                def safe_map(v):
+                    return v if v in le.classes_ else 'Unknown'
+                vals = vals.map(safe_map)
+                if 'Unknown' not in le.classes_:
+                    le.classes_ = np.append(le.classes_, 'Unknown')
+                X[col] = le.transform(vals)
             num_feats = ['driver_skill','driver_form_last3','team_form_last3','length_km','turns','elevation','drs_zones','grip','rain_prob']
             X[num_feats] = race_art['scaler'].transform(X[num_feats])
             proba_top5 = race_art['model'].predict_proba(X)[:, 1]
+            # Calibrate if calibrator available or can be fitted quickly
+            calibrator = fit_or_load_race_calibrator(race_art)
+            if calibrator is not None:
+                proba_top5 = calibrator.predict_proba(proba_top5.reshape(-1, 1))[:, 1]
             race_out = race_df[['driver_name','team_name']].copy()
             race_out['race_prob_top5'] = proba_top5
             race_out = race_out.sort_values('race_prob_top5', ascending=False).reset_index(drop=True)
