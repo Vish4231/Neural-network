@@ -25,17 +25,23 @@ def main():
     
     # Load models
     try:
-        model = keras.models.load_model('model/pre_race_model_top5.keras')
-        encoders = joblib.load('model/encoders_top5.pkl')
-        scaler = joblib.load('model/scaler_top5.pkl')
-        
+        model_path = f'model/pre_race_model_top5_{CIRCUIT.replace(" ", "_").lower()}.keras'
+        encoders_path = f'model/encoders_top5_{CIRCUIT.replace(" ", "_").lower()}.pkl'
+        scaler_path = f'model/scaler_top5_{CIRCUIT.replace(" ", "_").lower()}.pkl'
+        xgb_model_path = f'model/xgb_top5_{CIRCUIT.replace(" ", "_").lower()}.model'
+
         import xgboost as xgb
+
+        model = keras.models.load_model(model_path)
+        encoders = joblib.load(encoders_path)
+        scaler = joblib.load(scaler_path)
+
         xgb_model = xgb.XGBClassifier()
-        xgb_model.load_model('model/xgb_top5.model')
-        
-        print(f"✅ Models loaded successfully")
+        xgb_model.load_model(xgb_model_path)
+
+        print(f"✅ Models loaded successfully for track {CIRCUIT}")
     except Exception as e:
-        print(f"❌ Error loading models: {e}")
+        print(f"❌ Error loading models for track {CIRCUIT}: {e}")
         return
     
     # Helper function with basic retry

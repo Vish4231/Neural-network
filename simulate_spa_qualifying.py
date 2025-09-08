@@ -59,32 +59,19 @@ def simulate_qualifying_grid(
     return race_df
 
 if __name__ == "__main__":
-    # Silverstone 2025 qualifying results (user provided)
-    qual_averages = [
-        ("Max Verstappen", 1),
-        ("Oscar Piastri", 2),
-        ("Lando Norris", 3),
-        ("George Russell", 4),
-        ("Lewis Hamilton", 5),
-        ("Charles Leclerc", 6),
-        ("Andrea Kimi Antonelli", 7),
-        ("Oliver Bearman", 8),
-        ("Fernando Alonso", 9),
-        ("Pierre Gasly", 10),
-        ("Carlos Sainz", 11),
-        ("Yuki Tsunoda", 12),
-        ("Isack Hadjar", 13),
-        ("Alexander Albon", 14),
-        ("Esteban Ocon", 15),
-        ("Liam Lawson", 16),
-        ("Gabriel Bortoleto", 17),
-        ("Lance Stroll", 18),
-        ("Nico Hulkenberg", 19),
-        ("Franco Colapinto", 20),
-    ]
+    # Read Spa 2025 synthetic qualifying data
+    spa_qual_df = pd.read_csv("F1_2025_Dataset/Spa2025_SyntheticQuali_FastF1.csv")
+
+    # Extract qualifying averages as list of tuples (driver_name, grid)
+    qual_averages = list(zip(spa_qual_df["driver_name"], spa_qual_df["grid"]))
+
     simulate_qualifying_grid(
         race_csv_path="F1_2025_Dataset/F1_2025_RaceResults.csv",
         qual_averages=qual_averages,
-        track_name="Silverstone",
+        track_name="Spa-Francorchamps",
+        driver_column="Driver",
+        team_column="Team",
+        track_column="Track",
+        grid_column="Starting Grid",
         inplace=True
     )

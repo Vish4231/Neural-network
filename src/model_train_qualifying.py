@@ -72,31 +72,50 @@ y_reg = qual['position'].astype(int)
 y_class = (qual['position'].astype(int) <= 5).astype(int)  # Top 5 classification
 
 # Train/test split
-X_train, X_test, y_reg_train, y_reg_test, y_class_train, y_class_test = train_test_split(
-    X, y_reg, y_class, test_size=0.2, random_state=42, stratify=y_class)
+# Train separate models per track
+unique_tracks = qual['circuit'].unique()
+for track in unique_tracks:
+    print(f"\nTraining models for track: {track}")
+    track_df = qual[qual['circuit'] == track]
+    X_track = track_df[features]
+    y_reg_track = track_df['position'].astype(int)
+    y_class_track = (track_df['position'].astype(int) <= 5).astype(int)
 
-# Regression model
-xgb_reg = xgb.XGBRegressor(objective='reg:squarederror')
-xgb_reg.fit(X_train, y_reg_train)
-y_reg_pred = xgb_reg.predict(X_test)
-mae = mean_absolute_error(y_reg_test, y_reg_pred)
-print(f"Qualifying Regression MAE: {mae:.3f}")
+    # Impute missing values
+    for col in X_track.select_dtypes(include=[np.number]).columns:
+        X_track[col] = X_track[col].fillna(X_track[col].median())
+    for col in X_track.select_dtypes(include=['object']).columns:
+        mode = X_track[col].mode()[0] if not X_track[col].mode().empty else 'Unknown'
+        X_track[col] = X_track[col].fillna(mode)
 
-# Classification model
-xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss')
-xgb_clf.fit(X_train, y_class_train)
-y_class_pred = xgb_clf.predict(X_test)
-acc = accuracy_score(y_class_test, y_class_pred)
-print(f"Qualifying Top 5 Classification Accuracy: {acc:.3f}")
-print(classification_report(y_class_test, y_class_pred, target_names=['Not Top 5', 'Top 5']))
+    # Train/test split
+    X_train, X_test, y_reg_train, y_reg_test, y_class_train, y_class_test = train_test_split(
+        X_track, y_reg_track, y_class_track, test_size=0.2, random_state=42, stratify=y_class_track)
 
-# Save the better model
-if acc > (1 - mae / X_test.shape[0]):
-    joblib.dump(xgb_clf, 'model/xgb_qualifying_top5.model')
-    print("Saved classification model (top 5) as best.")
-else:
-    joblib.dump(xgb_reg, 'model/xgb_qualifying_regression.model')
-    print("Saved regression model (position) as best.")
+    # Regression model
+    xgb_reg = xgb.XGBRegressor(objective='reg:squarederror')
+    xgb_reg.fit(X_train, y_reg_train)
+    y_reg_pred = xgb_reg.predict(X_test)
+    mae = mean_absolute_error(y_reg_test, y_reg_pred)
+    print(f"Qualifying Regression MAE for {track}: {mae:.3f}")
+
+    # Classification model
+    xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+    xgb_clf.fit(X_train, y_class_train)
+    y_class_pred = xgb_clf.predict(X_test)
+    acc = accuracy_score(y_class_test, y_class_pred)
+    print(f"Qualifying Top 5 Classification Accuracy for {track}: {acc:.3f}")
+    print(classification_report(y_class_test, y_class_pred, target_names=['Not Top 5', 'Top 5']))
+
+    # Save the better model
+    if acc > (1 - mae / X_test.shape[0]):
+        model_path = f'model/xgb_qualifying_top5_{track.replace(" ", "_").lower()}.model'
+        joblib.dump(xgb_clf, model_path)
+        print(f"Saved classification model (top 5) as best for {track}.")
+    else:
+        model_path = f'model/xgb_qualifying_regression_{track.replace(" ", "_").lower()}.model'
+        joblib.dump(xgb_reg, model_path)
+        print(f"Saved regression model (position) as best for {track}.")
 
 def train_qualifying_model():
     df = pd.read_csv('data/f1db_merged_2010_2025.csv')
@@ -125,4 +144,4 @@ def train_qualifying_model():
     print('Qualifying model trained and saved.')
 
 if __name__ == '__main__':
-    train_qualifying_model() 
+    train_qualifying_model()

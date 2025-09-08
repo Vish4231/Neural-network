@@ -245,42 +245,69 @@ def predict_for_spa_2025():
     features = ['driver_skill', 'driver_form_last3', 'team_form_last3', 'length_km', 'turns', 'elevation', 'drs_zones', 'grip', 'rain_prob']
     cat_features = ['driver_name', 'team_name']
     # --- Qualifying Prediction ---
-    if quali_lineup is not None and not quali_lineup.empty:
-        quali_pred_df = engineer_features_for_prediction(quali_lineup, combined_df)
-        if quali_pred_df.empty:
-            print('No Spa qualifying data after feature engineering. Skipping qualifying simulation.')
+    try:
+        if quali_lineup is not None and not quali_lineup.empty:
+            quali_pred_df = engineer_features_for_prediction(quali_lineup, combined_df)
+            if quali_pred_df.empty:
+                print('No Spa qualifying data after feature engineering. Skipping qualifying simulation.')
+            else:
+                qual_model = joblib.load('model/qualifying_rf_model.pkl')
+                qual_encoders = joblib.load('model/qualifying_encoders.pkl')
+                qual_scaler = joblib.load('model/qualifying_scaler.pkl')
+                X = quali_pred_df[features + cat_features].fillna(0)
+                for col in cat_features:
+                    le = qual_encoders[col]
+                    X[col] = le.transform(X[col].astype(str))
+                if X.shape[0] == 0:
+                    print('No Spa qualifying data after encoding. Skipping qualifying simulation.')
+                else:
+                    try:
+                        X[features] = qual_scaler.transform(X[features])
+                    except Exception as e:
+                        print(f'Error during Spa qualifying scaling: {e}')
+                        return
+                    quali_preds = qual_model.predict(X)
+                    if len(quali_preds) == 0:
+                        print('No Spa qualifying predictions. Skipping qualifying simulation.')
+                    else:
+                        quali_lineup = quali_lineup.iloc[:len(quali_preds)].copy()
+                        quali_lineup['predicted_grid'] = quali_preds
+                        print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
+                        for i, row in quali_lineup.sort_values('predicted_grid').head(5).iterrows():
+                            print(f"{int(row['predicted_grid'])}. {row['driver_name']} ({row['team_name']})")
         else:
-            qual_model = joblib.load('model/qualifying_rf_model.pkl')
-            qual_encoders = joblib.load('model/qualifying_encoders.pkl')
-            qual_scaler = joblib.load('model/qualifying_scaler.pkl')
-            X = quali_pred_df[features + cat_features].fillna(0)
-            for col in cat_features:
-                le = qual_encoders[col]
-                X[col] = le.transform(X[col].astype(str))
-            X[features] = qual_scaler.transform(X[features])
-            quali_preds = qual_model.predict(X)
-            quali_lineup = quali_lineup.iloc[:len(quali_preds)].copy()
-            quali_lineup['predicted_grid'] = quali_preds
-            print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
-            for i, row in quali_lineup.sort_values('predicted_grid').head(5).iterrows():
-                print(f"{int(row['predicted_grid'])}. {row['driver_name']} ({row['team_name']})")
-    else:
-        print('No Spa qualifying data available. Skipping qualifying simulation.')
+            print('No Spa qualifying data available. Skipping qualifying simulation.')
+    except Exception as e:
+        print(f'Error during Spa qualifying simulation: {e}')
     # --- Race Prediction ---
-    race_pred_df = engineer_features_for_prediction(race_lineup, combined_df)
-    race_model = joblib.load('model/race_rf_model.pkl')
-    race_encoders = joblib.load('model/race_encoders.pkl')
-    race_scaler = joblib.load('model/race_scaler.pkl')
-    X_race = race_pred_df[features + cat_features].fillna(0)
-    for col in cat_features:
-        le = race_encoders[col]
-        X_race[col] = le.transform(X_race[col].astype(str))
-    X_race[features] = race_scaler.transform(X_race[features])
-    race_probs = race_model.predict_proba(X_race)[:, 1]
-    race_lineup['race_top5_prob'] = race_probs
-    print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
-    for i, row in race_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
-        print(f"{row['driver_name']} ({row['team_name']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
+    try:
+        race_pred_df = engineer_features_for_prediction(race_lineup, combined_df)
+        race_model = joblib.load('model/race_rf_model.pkl')
+        race_encoders = joblib.load('model/race_encoders.pkl')
+        race_scaler = joblib.load('model/race_scaler.pkl')
+        X_race = race_pred_df[features + cat_features].fillna(0)
+        for col in cat_features:
+            le = race_encoders[col]
+            X_race[col] = le.transform(X_race[col].astype(str))
+        if X_race.shape[0] == 0:
+            print('No Spa race data after encoding. Skipping race simulation.')
+        else:
+            try:
+                X_race[features] = race_scaler.transform(X_race[features])
+            except Exception as e:
+                print(f'Error during Spa race scaling: {e}')
+                return
+            race_probs = race_model.predict_proba(X_race)[:, 1]
+            if len(race_probs) == 0:
+                print('No Spa race predictions. Skipping race simulation.')
+            else:
+                race_lineup = race_lineup.iloc[:len(race_probs)].copy()
+                race_lineup['race_top5_prob'] = race_probs
+                print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
+                for i, row in race_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+                    print(f"{row['driver_name']} ({row['team_name']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
+    except Exception as e:
+        print(f'Error during Spa race simulation: {e}')
 
 import pandas as pd
 import joblib
@@ -310,12 +337,15 @@ def predict_for_spa_2025():
     for col in cat_features:
         le = qual_encoders[col]
         X[col] = le.transform(X[col].astype(str))
-    X[features] = qual_scaler.transform(X[features])
-    quali_preds = qual_model.predict(X)
-    spa_lineup['predicted_grid'] = quali_preds
-    print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
-    for i, row in spa_lineup.sort_values('predicted_grid').head(5).iterrows():
-        print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
+    if X.shape[0] == 0:
+        print('No Spa qualifying data after encoding. Skipping qualifying simulation.')
+    else:
+        X[features] = qual_scaler.transform(X[features])
+        quali_preds = qual_model.predict(X)
+        spa_lineup['predicted_grid'] = quali_preds
+        print('\n--- Predicted Spa 2025 Qualifying Top 5 ---')
+        for i, row in spa_lineup.sort_values('predicted_grid').head(5).iterrows():
+            print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
     # --- Race Prediction ---
     race_model = joblib.load('model/race_rf_model.pkl')
     race_encoders = joblib.load('model/race_encoders.pkl')
@@ -324,12 +354,15 @@ def predict_for_spa_2025():
     for col in cat_features:
         le = race_encoders[col]
         X_race[col] = le.transform(X_race[col].astype(str))
-    X_race[features] = race_scaler.transform(X_race[features])
-    race_probs = race_model.predict_proba(X_race)[:, 1]
-    spa_lineup['race_top5_prob'] = race_probs
-    print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
-    for i, row in spa_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
-        print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
+    if X_race.shape[0] == 0:
+        print('No Spa race data after encoding. Skipping race simulation.')
+    else:
+        X_race[features] = race_scaler.transform(X_race[features])
+        race_probs = race_model.predict_proba(X_race)[:, 1]
+        spa_lineup['race_top5_prob'] = race_probs
+        print('\n--- Predicted Spa 2025 Race Top 5 Probabilities ---')
+        for i, row in spa_lineup.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+            print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
 
 if __name__ == '__main__':
     predict_for_spa_2025()
@@ -402,12 +435,15 @@ def predict_for_yas_marina_2025():
     for col in cat_features:
         le = qual_encoders[col]
         X[col] = le.transform(X[col].astype(str))
-    X[features] = qual_scaler.transform(X[features])
-    quali_preds = qual_model.predict(X)
-    yas_lineup_df['predicted_grid'] = quali_preds
-    print('\n--- Predicted Yas Marina 2025 Qualifying Top 5 ---')
-    for i, row in yas_lineup_df.sort_values('predicted_grid').head(5).iterrows():
-        print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
+    if X.shape[0] == 0:
+        print('No Spa qualifying data after encoding. Skipping qualifying simulation.')
+    else:
+        X[features] = qual_scaler.transform(X[features])
+        quali_preds = qual_model.predict(X)
+        yas_lineup_df['predicted_grid'] = quali_preds
+        print('\n--- Predicted Yas Marina 2025 Qualifying Top 5 ---')
+        for i, row in yas_lineup_df.sort_values('predicted_grid').head(5).iterrows():
+            print(f"{int(row['predicted_grid'])}. {row['fullName']} ({row['name_constructor']})")
     # --- Race Prediction ---
     race_model = joblib.load('model/race_rf_model.pkl')
     race_encoders = joblib.load('model/race_encoders.pkl')
@@ -416,12 +452,15 @@ def predict_for_yas_marina_2025():
     for col in cat_features:
         le = race_encoders[col]
         X_race[col] = le.transform(X_race[col].astype(str))
-    X_race[features] = race_scaler.transform(X_race[features])
-    race_probs = race_model.predict_proba(X_race)[:, 1]
-    yas_lineup_df['race_top5_prob'] = race_probs
-    print('\n--- Predicted Yas Marina 2025 Race Top 5 Probabilities ---')
-    for i, row in yas_lineup_df.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
-        print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
+    if X_race.shape[0] == 0:
+        print('No Spa race data after encoding. Skipping race simulation.')
+    else:
+        X_race[features] = race_scaler.transform(X_race[features])
+        race_probs = race_model.predict_proba(X_race)[:, 1]
+        yas_lineup_df['race_top5_prob'] = race_probs
+        print('\n--- Predicted Yas Marina 2025 Race Top 5 Probabilities ---')
+        for i, row in yas_lineup_df.sort_values('race_top5_prob', ascending=False).head(5).iterrows():
+            print(f"{row['fullName']} ({row['name_constructor']}) - Top 5 Probability: {row['race_top5_prob']:.2%}")
 
 # To run Yas Marina prediction, uncomment below:
 # if __name__ == '__main__':

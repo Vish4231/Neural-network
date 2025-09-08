@@ -80,8 +80,17 @@ def main():
         qual[col] = qual[col].fillna('Unknown')
 
     # Load encoders and scaler
-    encoders = joblib.load('model/encoders_qualifying.pkl')
-    scaler = joblib.load('model/scaler_qualifying.pkl')
+    model_path_reg = f'model/xgb_qualifying_regression_{circuit.replace(" ", "_").lower()}.model'
+    model_path_clf = f'model/xgb_qualifying_top5_{circuit.replace(" ", "_").lower()}.model'
+    encoders_path = f'model/encoders_qualifying_{circuit.replace(" ", "_").lower()}.pkl'
+    scaler_path = f'model/scaler_qualifying_{circuit.replace(" ", "_").lower()}.pkl'
+
+    if not (os.path.exists(encoders_path) and os.path.exists(scaler_path)):
+        print(f"Encoders or scaler not found for track {circuit}.")
+        return
+
+    encoders = joblib.load(encoders_path)
+    scaler = joblib.load(scaler_path)
     for col in cat_features:
         le = encoders[col]
         qual[col] = qual[col].astype(str).apply(lambda x: x if x in le.classes_ else le.classes_[0])
@@ -90,11 +99,8 @@ def main():
 
     X = qual[features]
 
-    # Try to load regression model first
-    reg_model_path = 'model/xgb_qualifying_regression.model'
-    clf_model_path = 'model/xgb_qualifying_top5.model'
-    if os.path.exists(reg_model_path):
-        model = joblib.load(reg_model_path)
+    if os.path.exists(model_path_reg):
+        model = joblib.load(model_path_reg)
         y_pred = model.predict(X)
         qual['predicted_position'] = y_pred
         qual = qual.sort_values('predicted_position')
@@ -106,8 +112,8 @@ def main():
                 print(f"{i:2d}  | {row.driver_name_orig:<21} | {row.team_name_orig}")
             else:
                 print(f"{i:2d}  | {row.driver_name:<21} | {row.team_name}")
-    elif os.path.exists(clf_model_path):
-        model = joblib.load(clf_model_path)
+    elif os.path.exists(model_path_clf):
+        model = joblib.load(model_path_clf)
         y_prob = model.predict_proba(X)[:,1]
         qual['top5_prob'] = y_prob
         qual = qual.sort_values('top5_prob', ascending=False)
