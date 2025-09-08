@@ -17,19 +17,21 @@ out_path = st.text_input("Output CSV path", value="predictions_future_race.csv")
 if st.button("Run Prediction"):
     python_exec = sys.executable or 'python'
     cmd = [python_exec, os.path.join('src','predict_future_race.py'), '--year', str(year), '--circuit', circuit, '--output', out_path]
-    with st.spinner('Running predictor...'):
+    with st.spinner('Generating predictions... This may take a moment.'):
         try:
+            # Run quietly and only show final result
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            st.code(result.stdout)
-            if result.returncode != 0:
-                st.error(result.stderr)
-            else:
-                st.success(f"Saved predictions to {out_path}")
-                if os.path.exists(out_path):
-                    df = pd.read_csv(out_path)
-                    st.dataframe(df)
         except Exception as e:
-            st.error(str(e))
+            result = None
+            st.error(f"Prediction failed: {e}")
+    if result is not None:
+        if result.returncode != 0:
+            st.error("Prediction failed. Please try again or check server logs.")
+        else:
+            st.success(f"Saved predictions to {out_path}")
+            if os.path.exists(out_path):
+                df = pd.read_csv(out_path)
+                st.dataframe(df)
 
 st.markdown("Run locally: `streamlit run src/app_streamlit.py`")
 

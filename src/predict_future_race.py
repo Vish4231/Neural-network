@@ -139,7 +139,11 @@ def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame
     scaler = artifacts['scaler']
 
     cat_cols = ['team_name', 'driver_name', 'circuit', 'track_type']
-    num_cols = [c for c in pred_df_enc.columns if c not in cat_cols and c not in ['raceId']]
+    # Use the scaler's training feature names to avoid mismatch
+    if hasattr(scaler, 'feature_names_in_'):
+        num_cols = [c for c in scaler.feature_names_in_ if c in pred_df_enc.columns]
+    else:
+        num_cols = [c for c in pred_df_enc.columns if c not in cat_cols and c not in ['raceId']]
 
     df = pred_df_enc.copy()
     for col in cat_cols:
@@ -151,6 +155,10 @@ def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame
             df[col] = le.transform(df[col].astype(str))
 
     if num_cols:
+        # Ensure all required numeric columns exist; fill missing with 0
+        for col in num_cols:
+            if col not in df.columns:
+                df[col] = 0
         df[num_cols] = scaler.transform(df[num_cols])
 
     preds = []
@@ -175,6 +183,12 @@ def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame
         raise RuntimeError('No base models available for prediction')
 
     stack_X = np.vstack(preds).T
+    # Replace NaNs in stacking inputs with column means (fallback to 0)
+    if np.isnan(stack_X).any():
+        col_means = np.nanmean(stack_X, axis=0)
+        col_means = np.where(np.isnan(col_means), 0.0, col_means)
+        inds = np.where(np.isnan(stack_X))
+        stack_X[inds] = np.take(col_means, inds[1])
     if 'meta_model' in artifacts:
         top5_prob = artifacts['meta_model'].predict_proba(stack_X)[:, 1]
     else:
