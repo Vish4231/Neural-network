@@ -1,0 +1,21 @@
+driver,actual_position,predicted_position,position_error,prob_top5,actual_top5,predicted_top5
+Oscar Piastri,1,5.0,4.0,0.0611224109471912,True,False
+Lando Norris,2,4.0,2.0,0.4724772495531186,True,False
+Charles Leclerc,3,2.0,1.0,0.7686314431916751,True,True
+Max Verstappen,4,14.0,10.0,0.0021505219214491,True,False
+George Russell,5,1.0,4.0,0.9785889341072882,True,True
+Alexander Albon,6,20.0,14.0,0.0016554058656507,False,False
+Lewis Hamilton,7,3.0,4.0,0.7686314431916751,False,True
+Liam Lawson,8,11.0,3.0,0.0031832912755233,False,False
+Gabriel Bortoleto,9,8.0,1.0,0.0102829755279955,False,False
+Pierre Gasly,10,15.0,5.0,0.0021505219214491,False,False
+Oliver Bearman,11,16.0,5.0,0.00188682324636,False,False
+Nico Hulkenberg,12,7.0,5.0,0.0102829755279955,False,False
+Yuki Tsunoda,13,10.0,3.0,0.0047096981409256,False,False
+Lance Stroll,14,19.0,5.0,0.0016554058656507,False,False
+Esteban Ocon,15,17.0,2.0,0.00188682324636,False,False
+Kimi Antonelli,16,6.0,10.0,0.0514014742248826,False,False
+Fernando Alonso,17,18.0,1.0,0.0016554058656507,False,False
+Carlos Sainz,18,12.0,6.0,0.0027933081209043,False,False
+Franco Colapinto,19,,,,False,
+Isack Hadjar,20,13.0,7.0,0.0027933081209043,False,False

@@ -17,6 +17,7 @@ from feature_engineering import (
     track_features,
     normalize_circuit_name,
 )
+from fastf1_features import extract_event_features
 
 
 MODELS_DIR = 'model'
@@ -367,9 +368,35 @@ def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame
 
     preds = []
     if 'xgb_model' in artifacts:
-        preds.append(artifacts['xgb_model'].predict_proba(df)[:, 1])
+        try:
+            booster = artifacts['xgb_model'].get_booster()
+            feat_names = booster.feature_names if booster is not None else None
+        except Exception:
+            feat_names = getattr(artifacts['xgb_model'], 'feature_names_in_', None)
+        xgb_input = df
+        if feat_names:
+            # Create a DataFrame with exactly the training feature columns in order
+            cols = [c for c in feat_names if c in df.columns]
+            missing = [c for c in feat_names if c not in df.columns]
+            xgb_input = df[cols].copy()
+            for c in missing:
+                xgb_input[c] = 0
+            xgb_input = xgb_input[feat_names]
+        preds.append(artifacts['xgb_model'].predict_proba(xgb_input)[:, 1])
     if 'lgbm_model' in artifacts:
-        preds.append(artifacts['lgbm_model'].predict(df))
+        try:
+            lgbm_feat = artifacts['lgbm_model'].feature_name()
+        except Exception:
+            lgbm_feat = None
+        lgb_input = df
+        if lgbm_feat:
+            cols = [c for c in lgbm_feat if c in df.columns]
+            missing = [c for c in lgbm_feat if c not in df.columns]
+            lgb_input = df[cols].copy()
+            for c in missing:
+                lgb_input[c] = 0
+            lgb_input = lgb_input[lgbm_feat]
+        preds.append(artifacts['lgbm_model'].predict(lgb_input))
     if 'cat_model' in artifacts:
         preds.append(artifacts['cat_model'].predict_proba(df)[:, 1])
 
@@ -394,7 +421,24 @@ def ensemble_predict(pred_df_enc: pd.DataFrame, artifacts: dict) -> pd.DataFrame
         inds = np.where(np.isnan(stack_X))
         stack_X[inds] = np.take(col_means, inds[1])
     if 'meta_model' in artifacts:
-        top5_prob = artifacts['meta_model'].predict_proba(stack_X)[:, 1]
+        # Align stacking features to meta-model expected size
+        try:
+            expected = getattr(artifacts['meta_model'], 'n_features_in_', None)
+        except Exception:
+            expected = None
+        stack_input = stack_X
+        if expected is not None:
+            if stack_X.shape[1] > expected:
+                stack_input = stack_X[:, :expected]
+            elif stack_X.shape[1] < expected:
+                # Pad with column means to reach expected size
+                pad_cols = expected - stack_X.shape[1]
+                col_means = np.nanmean(stack_X, axis=0)
+                if np.isnan(col_means).any():
+                    col_means = np.where(np.isnan(col_means), 0.0, col_means)
+                pad = np.tile(col_means.mean(), (stack_X.shape[0], pad_cols))
+                stack_input = np.hstack([stack_X, pad])
+        top5_prob = artifacts['meta_model'].predict_proba(stack_input)[:, 1]
     else:
         top5_prob = stack_X.mean(axis=1)
 
@@ -409,6 +453,7 @@ def main():
     parser.add_argument('--circuit', type=str, required=True, help='Circuit name, e.g., "Spa-Francorchamps"')
     parser.add_argument('--output', type=str, default='predictions_future_race.csv')
     parser.add_argument('--use_fastf1', action='store_true', help='Fetch latest lineup from FastF1 if available')
+    parser.add_argument('--use_fastf1_features', action='store_true', help='Merge FastF1 telemetry/weather features if available')
     args = parser.parse_args()
 
     print('Loading models...')
@@ -429,6 +474,14 @@ def main():
     base_pred = build_prediction_frame(lineup, args.circuit)
     print('Engineering features...')
     pred_features = engineer_features_for_prediction(base_pred, combined)
+
+    # Optional: merge FastF1 telemetry/weather features by driver/team
+    if args.use_fastf1_features:
+        print('Merging FastF1 telemetry/weather features...')
+        ff1 = extract_event_features(args.year, args.circuit)
+        if not ff1.empty:
+            # Conservative merge: left join, keep existing cols when FastF1 missing
+            pred_features = pred_features.merge(ff1, on=['driver_name','team_name'], how='left')
 
     print('Running ensemble predictions...')
     base_results = ensemble_predict(pred_features, artifacts)
