@@ -14,10 +14,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import our custom modules
-from comprehensive_data_pipeline import ComprehensiveF1DataPipeline
-from pattern_recognition_engine import F1PatternRecognitionEngine
-from advanced_prediction_system import AdvancedF1PredictionSystem
-from validation_system import F1PredictionValidationSystem
+from .comprehensive_data_pipeline import ComprehensiveF1DataPipeline
+from .pattern_recognition_engine import F1PatternRecognitionEngine
+from .advanced_prediction_system import AdvancedF1PredictionSystem
+from .validation_system import F1PredictionValidationSystem
 
 class MasterF1PredictionPipeline:
     def __init__(self, 

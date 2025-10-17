@@ -1,0 +1,21 @@
+driver_name,team_name,driver_number,year,is_rookie,previous_team
+Max Verstappen,Red Bull Racing,1,2025,False,Red Bull Racing
+Yuki Tsunoda,Red Bull Racing,30,2025,False,Racing Bulls
+Charles Leclerc,Ferrari,16,2025,False,Ferrari
+Lewis Hamilton,Ferrari,44,2025,False,Mercedes
+George Russell,Mercedes,63,2025,False,Mercedes
+Andrea Kimi Antonelli,Mercedes,77,2025,True,Mercedes
+Lando Norris,McLaren,4,2025,False,McLaren
+Oscar Piastri,McLaren,81,2025,False,McLaren
+Fernando Alonso,Aston Martin,14,2025,False,Aston Martin
+Lance Stroll,Aston Martin,18,2025,False,Aston Martin
+Pierre Gasly,Alpine,10,2025,False,Alpine
+Franco Colapinto,Alpine,21,2025,True,Alpine
+Alexander Albon,Williams,23,2025,False,Williams
+Carlos Sainz,Williams,55,2025,False,Ferrari
+Liam Lawson,Racing Bulls,40,2025,True,Racing Bulls
+Isack Hadjar,Racing Bulls,50,2025,True,Racing Bulls
+Esteban Ocon,Haas,31,2025,False,Alpine
+Oliver Bearman,Haas,87,2025,True,Haas
+Nico Hulkenberg,Sauber,27,2025,False,Sauber
+Gabriel Bortoleto,Sauber,35,2025,True,Sauber
