@@ -56,6 +56,8 @@ def get_cota_circuit_features():
         'length_km': 5.513,
         'turns': 20,
         'elevation': 41,
+        'altitude': 150,  # meters above sea level
+        'downforce_setup': 0.7,  # balanced downforce (0.0 = low, 1.0 = high)
         'drs_zones': 2,
         'grip': 8,
         'rain_prob': 0.25,
@@ -90,6 +92,8 @@ def predict_cota_2025():
     print(f"📏 Length: {cota_features['length_km']} km")
     print(f"🔄 Turns: {cota_features['turns']}")
     print(f"📈 Elevation: {cota_features['elevation']}m")
+    print(f"🏔️ Altitude: {cota_features['altitude']}m above sea level")
+    print(f"🛩️ Downforce Setup: {cota_features['downforce_setup']:.1f} (balanced)")
     print(f"🚗 DRS Zones: {cota_features['drs_zones']}")
     
     # Add circuit features to lineup
